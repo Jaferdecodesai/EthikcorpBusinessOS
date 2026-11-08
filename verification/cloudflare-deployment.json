@@ -1,0 +1,68 @@
+{
+  "deployedAt": "2026-10-25",
+  "provider": "Cloudflare Workers",
+  "worker": "ethikcorp-superbrain",
+  "baseUrl": "https://ethikcorp-superbrain.aqionlabs.workers.dev",
+  "urls": {
+    "superbrainPM": "https://ethikcorp-superbrain.aqionlabs.workers.dev/pm",
+    "departments": "https://ethikcorp-superbrain.aqionlabs.workers.dev/departments"
+  },
+  "versionId": "853816c1-30c0-4f16-92b0-c3fe2db0857f",
+  "deploymentVerified": "Wrangler reported this version at 100 percent traffic after configuring the session secret.",
+  "health": {
+    "ok": true,
+    "mode": "cloud-preview",
+    "hosting": "cloudflare",
+    "storage": "sqlite-durable-object",
+    "isolation": "signed-browser-session",
+    "githubTokenConfigured": false,
+    "liveRuntimes": false,
+    "build": "2026-10-25-cloudflare-v1"
+  },
+  "automatedTests": {
+    "passed": 20,
+    "failed": 0
+  },
+  "liveSmoke": "output/qa/cloudflare-live-smoke.json",
+  "localSmoke": "output/qa/cloudflare-local-smoke.json",
+  "sqliteRestartPersistence": true,
+  "browserVerification": {
+    "departmentOverview": true,
+    "pmOverview": true,
+    "pmChecklistSurvivesReload": true,
+    "temporaryCheckboxRestoredToUnchecked": true
+  },
+  "storage": {
+    "departmentRecords": "SQLite Durable Object scoped to a signed browser cookie",
+    "pmPlan": "browser localStorage",
+    "localClientFilesMigrated": false
+  },
+  "boundaries": {
+    "employeeAccounts": false,
+    "sharedTeamWorkspace": false,
+    "uaeResidencyConfigured": false,
+    "liveSim": false,
+    "liveLobu": false,
+    "githubConnected": false
+  },
+  "assetSha256": {
+    "assets/fira-code-latin-500-normal-B6gioGu8.woff2": "9e4da5ad2c147be02544df5a732d22830a82b1e9800dc06267ba656f5c40f7e9",
+    "assets/fira-code-latin-500-normal-aMLC2AMm.woff": "734de04f387ae2bf4082956bd3911f3cdc322c2e6c9459c98fff684ceaeb5100",
+    "assets/fira-sans-latin-400-normal-66xCkunx.woff": "6c9caf93cb76eab79ae2ae224fb7ba25ef66ca649858635dfb3de9c678b41b4b",
+    "assets/fira-sans-latin-400-normal-a0AnQzuD.woff2": "3e38d8c01fe97529fbf0a086bf958d724b723ca7fc8be77b4ba5745f6259b6ca",
+    "assets/fira-sans-latin-500-normal-Bkfzcwmr.woff": "8edde31b4a74a135a823684659c631f76ab85e434561c7651b117cdd2b068613",
+    "assets/fira-sans-latin-500-normal-Bvbxc8ch.woff2": "88d3e420adee3fa99ae50c15b123e3c9a07ce0ec0c03a01bd6bdd5232822da28",
+    "assets/fira-sans-latin-600-normal-CXKlxLG9.woff2": "55e09735e30d8492afac5d59ac433c6b367bb7dd00c46e157cfe95c9fb29e833",
+    "assets/fira-sans-latin-600-normal-DtSgd811.woff": "a164435e83f628c31546b13f6efffacf1c8fb9cfeb4ac0a807116eff2dfe223f",
+    "assets/fira-sans-latin-700-normal-CRhwpWTq.woff2": "c753d7153cac2cfeb877264d18f11197ca672d3e04ba1472154a54777a4e354d",
+    "assets/fira-sans-latin-700-normal-DgqLm3Fi.woff": "285307f2c7645e55e8582dd3dfba35468e854210bcc15ac7d56ca718d57a59e6",
+    "assets/index-B7ZKyW49.js": "2b640ab369ee5b5158d7f15c8b2081a7189162f07de77389c4e2634eb8f5b65a",
+    "assets/index-C8LPg0vW.css": "4e27a097880ae70d4ec64b3e592e845217d9a993429264797d518ea6281e319a",
+    "index.html": "82c4769d3e186e8d6812ff5f3edd4afae69873f0043625fcbc2b13b32b26fe17",
+    "integrations/DEPARTMENT_WORKSPACES_GUIDE.md": "32f1db3da56834af36c54f257b770cbe8fbdeec3f4bff90bce4c50d0effea2b2",
+    "integrations/SIM_LOBU_RESEARCH_AND_SETUP.md": "f973f1e47c478f70e655bf70f1bcbfb5e5749602cb6565dd43461d84099707cd",
+    "integrations/ethikcorp-runtime-starter.zip": "27cac7a555db0756f18b54b4f43819ec76e231c4e53d756e51d003c99e2c0339",
+    "templates/ethikcorp-discovery-inventory-template.docx": "86f8fbecad4b4cb098c4baa7ac3a0efa4324366bd5e0c2efa2cdc28ac296f79e",
+    "templates/ethikcorp-discovery-inventory-template.pdf": "bc641f868bae106e806c964da48ec09e91e99f551dea0f9626913c07881067c5"
+  }
+}

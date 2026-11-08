@@ -1,0 +1,97 @@
+{
+  "blocks": {
+    "start": {
+      "id": "start",
+      "type": "start_trigger",
+      "name": "Start",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "enabled": true,
+      "subBlocks": {
+        "inputFormat": {
+          "id": "inputFormat",
+          "type": "input-format",
+          "value": [
+            {
+              "id": "objective",
+              "name": "objective",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            },
+            {
+              "id": "sourceRefs",
+              "name": "sourceRefs",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            },
+            {
+              "id": "reviewer",
+              "name": "reviewer",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            },
+            {
+              "id": "department",
+              "name": "department",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            }
+          ]
+        }
+      },
+      "outputs": {},
+      "data": {}
+    },
+    "prepare": {
+      "id": "prepare",
+      "type": "function",
+      "name": "Prepare",
+      "position": {
+        "x": 440,
+        "y": 100
+      },
+      "enabled": true,
+      "subBlocks": {
+        "language": {
+          "id": "language",
+          "type": "dropdown",
+          "value": "javascript"
+        },
+        "code": {
+          "id": "code",
+          "type": "code",
+          "value": "const objective = <start.objective>;\nconst sourceRefs = <start.sourceRefs>;\nconst reviewer = <start.reviewer>;\nif (typeof objective !== 'string' || !objective.trim()) throw new Error('A workflow brief is required');\nreturn { department: \"sales\", workflow: \"sales-qualification\", engine: 'structured-template', reviewRequired: true, reviewer: reviewer || null, sourceRefs: sourceRefs || '', brief: objective, sections: [{\"title\":\"Known enquiry facts\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"Qualification criteria\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"Missing information\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"Recommended next conversation\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"Owner and follow-up\",\"content\":\"Reviewer to complete from approved evidence.\"}], draftStatus: 'pending_review' };"
+        }
+      },
+      "outputs": {
+        "result": {
+          "type": "json",
+          "description": "Structured working draft"
+        }
+      },
+      "data": {}
+    }
+  },
+  "edges": [
+    {
+      "id": "start-prepare",
+      "source": "start",
+      "target": "prepare",
+      "sourceHandle": "source",
+      "targetHandle": "target"
+    }
+  ],
+  "loops": {},
+  "parallels": {},
+  "variables": {},
+  "metadata": {
+    "name": "Ethikcorp / Sales & BD / Lead qualification",
+    "description": "Structured starter; add approved model/retrieval steps after testing."
+  }
+}

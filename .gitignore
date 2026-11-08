@@ -1,0 +1,33 @@
+# Secrets, local configuration and private data
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+.data/
+.private/
+.lobu/
+workspaces/
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated or workstation files
+node_modules/
+dist/
+.wrangler/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+coverage/
+tmp/
+output/archive/
+output/qa/
+output/docx/

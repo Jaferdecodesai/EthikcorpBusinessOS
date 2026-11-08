@@ -1,0 +1,97 @@
+{
+  "blocks": {
+    "start": {
+      "id": "start",
+      "type": "start_trigger",
+      "name": "Start",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "enabled": true,
+      "subBlocks": {
+        "inputFormat": {
+          "id": "inputFormat",
+          "type": "input-format",
+          "value": [
+            {
+              "id": "objective",
+              "name": "objective",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            },
+            {
+              "id": "sourceRefs",
+              "name": "sourceRefs",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            },
+            {
+              "id": "reviewer",
+              "name": "reviewer",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            },
+            {
+              "id": "department",
+              "name": "department",
+              "type": "string",
+              "value": "",
+              "collapsed": false
+            }
+          ]
+        }
+      },
+      "outputs": {},
+      "data": {}
+    },
+    "prepare": {
+      "id": "prepare",
+      "type": "function",
+      "name": "Prepare",
+      "position": {
+        "x": 440,
+        "y": 100
+      },
+      "enabled": true,
+      "subBlocks": {
+        "language": {
+          "id": "language",
+          "type": "dropdown",
+          "value": "javascript"
+        },
+        "code": {
+          "id": "code",
+          "type": "code",
+          "value": "const objective = <start.objective>;\nconst sourceRefs = <start.sourceRefs>;\nconst reviewer = <start.reviewer>;\nif (typeof objective !== 'string' || !objective.trim()) throw new Error('A workflow brief is required');\nreturn { department: \"hr\", workflow: \"hr-onboarding\", engine: 'structured-template', reviewRequired: true, reviewer: reviewer || null, sourceRefs: sourceRefs || '', brief: objective, sections: [{\"title\":\"Pre-start prerequisites\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"First-week plan\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"30 / 60 / 90 milestones\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"Access and policy acknowledgements\",\"content\":\"Reviewer to complete from approved evidence.\"},{\"title\":\"HR approval\",\"content\":\"Reviewer to complete from approved evidence.\"}], draftStatus: 'pending_review' };"
+        }
+      },
+      "outputs": {
+        "result": {
+          "type": "json",
+          "description": "Structured working draft"
+        }
+      },
+      "data": {}
+    }
+  },
+  "edges": [
+    {
+      "id": "start-prepare",
+      "source": "start",
+      "target": "prepare",
+      "sourceHandle": "source",
+      "targetHandle": "target"
+    }
+  ],
+  "loops": {},
+  "parallels": {},
+  "variables": {},
+  "metadata": {
+    "name": "Ethikcorp / HR & Talent / Onboarding plan",
+    "description": "Structured starter; add approved model/retrieval steps after testing."
+  }
+}

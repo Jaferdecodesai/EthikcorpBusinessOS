@@ -1,0 +1,16 @@
+stage,item_id,required_input,client_owner,example_format,classification,transfer_method,status,validation_or_exit_evidence
+Charter,CH-01,Executive sponsor and project owner,,Names and business email,Internal,Secure onboarding form,Not requested,Signed charter
+Charter,CH-02,Pilot departments and success measures,,Three departments and baseline metric definitions,Internal,Secure onboarding form,Not requested,Approved pilot scope
+Data map,DM-01,Source inventory per department,,Source URL or system and folder plus owner and audience,Internal,Secure onboarding form,Not requested,Approved source register
+Data map,DM-02,Client and engagement confidentiality boundaries,,ACL matrix by engagement,Confidential,Secure onboarding form,Not requested,Access design approved
+Hosting,HO-01,Chosen residency tier and processing restrictions,,A B C or D plus prohibited egress,Restricted,Secure onboarding form,Not requested,Data-flow signoff
+Hosting,HO-02,SSO and user group mapping,,IdP groups and role owners,Restricted,Secure IT channel,Not requested,Authentication test receipt
+Hosting,HO-03,Read-only connector authorization,,Service account scopes and system owners,Restricted,Client key vault and IT channel,Not requested,Least-privilege connection test
+Collection,CO-01,Approved source documents for pilot,,Current files with final or draft flag and source IDs,Confidential,Encrypted transfer zone or read-only connector,Not requested,Manifest and checksums
+Collection,CO-02,CRM and task field dictionaries if in scope,,Field list meanings and stable record IDs,Confidential,Encrypted transfer zone or read-only connector,Not requested,Schema review
+Structuring,ST-01,Canonical terms owners and superseded versions,,Terminology table and version lineage,Internal,Secure onboarding form,Not requested,Curated package approval
+Structuring,ST-02,Claims permissions and excluded content,,Approved claims and explicit exclusions,Confidential,Secure onboarding form,Not requested,Owner signoff
+Evaluation,EV-01,Representative questions and expected evidence,,Questions with expected source IDs and nonanswer cases,Confidential,Encrypted transfer zone,Not requested,Golden set approved
+Evaluation,EV-02,Named reviewers and release thresholds,,Reviewer roster and target criteria,Internal,Secure onboarding form,Not requested,Evaluation plan signed
+Lead bots,LB-01,Department mandate tools and approval route,,Bot card for each pilot department,Internal,Secure onboarding form,Not requested,Dry run and owner signoff
+Pilot,PI-01,Workflow baseline measurements,,Current turnaround review time and quality sample,Confidential,Encrypted transfer zone,Not requested,Baseline snapshot approved

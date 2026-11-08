@@ -1,0 +1,65 @@
+{
+  "base": "https://ethikcorp-superbrain.aqionlabs.workers.dev",
+  "checkedAt": "2026-11-08T17:21:11.905Z",
+  "passed": 14,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Cloud health and security headers",
+      "passed": true
+    },
+    {
+      "name": "Both app links resolve to the built application",
+      "passed": true
+    },
+    {
+      "name": "API requires a signed browser session",
+      "passed": true
+    },
+    {
+      "name": "Nine departments and nineteen workflows load",
+      "passed": true
+    },
+    {
+      "name": "Task creation, completion and subsequent read persist",
+      "passed": true
+    },
+    {
+      "name": "Independent browser cannot read or mutate another workspace",
+      "passed": true
+    },
+    {
+      "name": "Cross-department mutation is denied",
+      "passed": true
+    },
+    {
+      "name": "Completed draft and exact-version review persist",
+      "passed": true
+    },
+    {
+      "name": "Memory correction retains earlier provenance",
+      "passed": true
+    },
+    {
+      "name": "Handoff arrives once in the receiving department",
+      "passed": true
+    },
+    {
+      "name": "Local planner conversation persists",
+      "passed": true
+    },
+    {
+      "name": "Cross-origin and missing-origin writes are denied",
+      "passed": true
+    },
+    {
+      "name": "Hosted runtime and GitHub routes stay unconnected",
+      "passed": true
+    },
+    {
+      "name": "Starter and client intake downloads are available",
+      "passed": true
+    }
+  ],
+  "scope": "Synthetic deployment tests in isolated browser sessions; no company records or live AI providers used."
+}

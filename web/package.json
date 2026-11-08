@@ -1,0 +1,29 @@
+{
+  "name": "superbrain-pm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.mjs",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/*.test.mjs",
+    "build:cloudflare": "VITE_HOSTING=cloudflare npm run build",
+    "cloudflare:dev": "npx --yes --package node@22 node node_modules/wrangler/bin/wrangler.js dev --port 8787",
+    "cloudflare:deploy": "npm run build:cloudflare && npx --yes --package node@22 node node_modules/wrangler/bin/wrangler.js deploy"
+  },
+  "dependencies": {
+    "@fontsource/fira-code": "^5.2.6",
+    "@fontsource/fira-sans": "^5.2.6",
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^5.4.15",
+    "typescript": "^5.8.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
+    "@types/node": "^22.14.0",
+    "wrangler": "4.151.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ethikcorp-lobu-specialists",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <25 || >=26"
+  },
+  "scripts": {
+    "validate": "lobu validate"
+  },
+  "devDependencies": {
+    "@lobu/cli": "22.0.0"
+  }
+}
