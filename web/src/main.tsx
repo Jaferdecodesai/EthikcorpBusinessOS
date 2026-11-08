@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-500.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/fraunces/latin-600.css";
 import "@fontsource/fira-sans/latin-400.css";
 import "@fontsource/fira-sans/latin-500.css";
 import "@fontsource/fira-sans/latin-600.css";
@@ -9,6 +13,11 @@ import { sources, stages, type Source, type Stage } from "./data";
 import "./style.css";
 import { DepartmentsApp } from "./DepartmentsApp";
 import { cloudPreview, ensureCloudSession, HostingNotice } from "./hosting";
+import { PortalFrame } from "./portal-frame";
+import { CeoDesk } from "./ceo";
+import { KnowledgeAdmin } from "./knowledge";
+import { GuideDock } from "./guide";
+import "./portal.css";
 
 type SourceRecord = { status: "not-started" | "located" | "uploaded" | "excluded"; owner: string; locator: string; approvalRef: string; note: string; githubPath?: string; fileName?: string };
 type Repo = { owner: string; name: string; branch: string; root: string };
@@ -39,9 +48,10 @@ function stageProgress(stage: Stage, checked: Record<string, boolean>) {
   return { done, total: stage.tasks.length };
 }
 
-function App() {
+function App({ initialStage = "overview" }: { initialStage?: string }) {
   const [state, setState] = useState<PMState>(loadState);
-  const [active, setActive] = useState("overview");
+  const [active, setActive] = useState(initialStage && initialStage !== "overview" ? initialStage : "overview");
+  useEffect(() => { setActive(stages.some((stage) => stage.id === initialStage) ? initialStage : "overview"); }, [initialStage]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -141,33 +151,24 @@ function App() {
   const selectedStage = stages.find((s) => s.id === active);
   const checklistStage = selectedStage || stages[0];
   const selectedTask = selectedStage?.tasks.find((task) => task.id === selectedTaskId) || selectedStage?.tasks[0];
+  function goStage(id: string) { window.location.hash = id === "overview" ? "pm" : `pm/${id}`; }
   return (
-    <div className="shell">
-      <aside className="sidebar" aria-label="Project stages">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">S</span>
-          <div><strong>Superbrain PM</strong><small>ETHIKCORP PILOT</small></div>
-        </div>
-        <div className="sidebar-summary"><span>Creation progress</span><strong>{completed}<em> / {total}</em></strong><div className="meter" aria-label={`${completed} of ${total} checklist tasks completed`}><span style={{ width: `${completed / total * 100}%` }} /></div></div>
-        <nav className="nav">
-          <a className="nav-item" href="#departments"><span className="nav-index">↗</span><span>Department workspaces</span></a>
-          <button className={active === "overview" ? "nav-item active" : "nav-item"} onClick={() => setActive("overview")} aria-current={active === "overview" ? "page" : undefined}><span className="nav-index">◫</span><span>Overview</span></button>
-          <div className="nav-caption">CREATION WORKFLOW</div>
-          {stages.map((stage, index) => {
-            const p = stageProgress(stage, state.checked);
-            return <button key={stage.id} className={active === stage.id ? "nav-item active" : "nav-item"} onClick={() => setActive(stage.id)} aria-current={active === stage.id ? "page" : undefined}>
-              <span className="nav-index">{String(index + 1).padStart(2, "0")}</span><span>{stage.name}</span><span className={p.done === p.total ? "nav-count complete" : "nav-count"}>{p.done}/{p.total}</span>
-            </button>;
-          })}
-        </nav>
-        <div className="sidebar-foot">{cloudPreview ? "Cloud preview workspace" : "Local project workspace"}<br /><span>Private data requires client approval</span></div>
-      </aside>
+    <div className="pm-workspace">
+      <div className="vh">
+        <div><div className="eyebrow">Customer formation journey</div><h1>{selectedStage ? selectedStage.name : "From records to a reviewed brain"}</h1><p className="sub">The PM walks the customer from inventory through cleaning, vectors, evaluation and a fine-tune decision. Checklist progress is {completed} of {total}. A tick is not acceptance, and offline operation is not required.</p></div>
+        <button className="btn ghost" onClick={exportPlan}>Export plan</button>
+      </div>
+      <ol className="stepper" aria-label="Formation stages">{stages.map((stage, index) => {
+        const progress = stageProgress(stage, state.checked);
+        const cls = active === stage.id ? "cur" : progress.done === progress.total ? "done" : "";
+        return <li key={stage.id} className={cls}><button type="button" onClick={() => goStage(stage.id)} aria-current={active === stage.id ? "step" : undefined}><b>{index + 1}</b><span>{stage.short}</span></button></li>;
+      })}</ol>
+      <HostingNotice />
+      <div className="pm-grid">
       <main className="main">
-        <header className="topbar"><div><span className="eyebrow">AQIONCLOUD / ETHIKCORP</span><h1>{selectedStage ? selectedStage.name : "Creation overview"}</h1></div><div className="top-actions"><span className="mode-tag">Pilot design</span><button className="quiet-button" onClick={exportPlan}>Export plan</button></div></header>
-        <HostingNotice /><div className="content">
+        <div className="content">
           {active === "overview" ? <>
-            <div className="hero-panel"><div><p className="hero-kicker">ONE BRAIN, NINE CONTROLLED STEPS</p><h2>Build the source of truth before the bots.</h2><p>The PM guides collection, review, indexing and evaluation. <a href="#departments" style={{color:"#bcf3df"}}>Open the nine department workspaces →</a></p></div><div className="hero-figure"><strong>{stages.filter((s) => stageProgress(s, state.checked).done === s.tasks.length).length}<span>/9</span></strong><small>stages ready for review</small></div></div>
-            <section className="section"><div className="section-head"><h2>Creation path</h2><p>Each stage needs client evidence before its gate can be accepted.</p></div><div className="stage-grid">{stages.map((stage, i) => { const p = stageProgress(stage, state.checked); return <button className="stage-tile" key={stage.id} onClick={() => setActive(stage.id)}><span className="tile-num">{String(i + 1).padStart(2, "0")}</span><strong>{stage.name}</strong><small>{stage.short}</small><span className="tile-progress">{p.done} of {p.total} tasks</span></button>; })}</div></section>
+            <div className="grid g4" style={{ marginBottom: 16 }}>{stages.map((stage) => { const p = stageProgress(stage, state.checked); return <button className="card kpi pad" key={stage.id} onClick={() => goStage(stage.id)} style={{ textAlign: "left", cursor: "pointer", border: "1px solid var(--line)" }}><div className="l">{stage.short}</div><div className="v">{p.done}/{p.total}</div><div className="x">{stage.name}</div></button>; })}</div>
             <Pipeline />
           </> : selectedStage ? <>
             {active === "discovery" && <TemplateBanner />}
@@ -177,11 +178,13 @@ function App() {
             {active === "collection" && <CollectionPanel state={state} patchRepo={patchRepo} patchRecord={patchRecord} query={sourceQuery} setQuery={setSourceQuery} filter={sourceFilter} setFilter={setSourceFilter} found={found} expanded={expandedSource} setExpanded={setExpandedSource} serverReady={serverReady} busy={busy} testRepo={testRepo} syncPlan={syncPlan} loadPlan={loadPlan} uploadSource={uploadSource} />}
             {active === "embeddings" && <Pipeline />}
             {active === "access" && <TestPanel kind="access" />}
-            {active === "evaluation" && <TestPanel kind="quality" />}
+            {active === "evaluation" && <><TestPanel kind="quality" /><section className="card pad" style={{marginTop:16}}><div className="eyebrow">Selective fine-tuning</div><h2>Not warranted, and not started</h2><p className="sub">Retrieval remains the path for current facts. Fine-tuning would be a later decision after a demonstrated behavior gap, an approved dataset and a verified UAE training location. This screen does not train a model.</p></section></>}
           </> : null}
         </div>
+      <aside className="checklist-panel card" aria-label="Stage checklist" style={{ marginTop: 16 }}><div className="checklist-kicker">ONE CHECKLIST</div><h2>{checklistStage.name}</h2><p>Select a task to see its work area. Use the separate checkbox only after its evidence has been approved.</p><div className="checklist-progress"><strong>{stageProgress(checklistStage, state.checked).done} / {checklistStage.tasks.length}</strong><span>tasks completed</span></div><div className="checklist-items">{checklistStage.tasks.map((task, i) => <div className={selectedStage?.id === checklistStage.id && selectedTask?.id === task.id ? "checklist-item selected" : "checklist-item"} key={task.id}><input type="checkbox" aria-label={`Mark ${task.label} complete`} checked={Boolean(state.checked[task.id])} onChange={() => toggleTask(task.id)} /><button type="button" onClick={() => openTask(checklistStage, task.id)}><small>0{i + 1} · {state.checked[task.id] ? "Complete" : "To do"}</small><strong>{task.label}</strong><span>View task →</span></button></div>)}</div><div className="checklist-note"><strong>Gate review</strong><p>Checklist completion records progress; it does not grant data or access approval.</p>{state.lastSync && <small>Last GitHub plan sync: {new Date(state.lastSync).toLocaleString("en-AE")}</small>}</div></aside>
       </main>
-      <aside className="checklist-panel" aria-label="Stage checklist"><div className="checklist-kicker">ONE CHECKLIST</div><h2>{checklistStage.name}</h2><p>Select a task to see its work area. Use the separate checkbox only after its evidence has been approved.</p><div className="checklist-progress"><strong>{stageProgress(checklistStage, state.checked).done} / {checklistStage.tasks.length}</strong><span>tasks completed</span></div><div className="checklist-items">{checklistStage.tasks.map((task, i) => <div className={selectedStage?.id === checklistStage.id && selectedTask?.id === task.id ? "checklist-item selected" : "checklist-item"} key={task.id}><input type="checkbox" aria-label={`Mark ${task.label} complete`} checked={Boolean(state.checked[task.id])} onChange={() => toggleTask(task.id)} /><button type="button" onClick={() => openTask(checklistStage, task.id)}><small>0{i + 1} · {state.checked[task.id] ? "Complete" : "To do"}</small><strong>{task.label}</strong><span>View task →</span></button></div>)}</div><div className="checklist-note"><strong>Gate review</strong><p>Checklist completion records progress; it does not grant data or access approval.</p>{state.lastSync && <small>Last GitHub plan sync: {new Date(state.lastSync).toLocaleString("en-AE")}</small>}</div></aside>
+      <GuideDock checked={state.checked} records={state.records} githubReady={serverReady} />
+      </div>
       {message && <div role="status" className="toast"><span>{message}</span><button aria-label="Dismiss message" onClick={() => setMessage("")}>×</button></div>}
     </div>
   );
@@ -263,8 +266,18 @@ function RootApp() {
   useEffect(() => { let active=true; ensureCloudSession().then(()=>{if(active)setSessionReady(true);}).catch(error=>{if(active)setSessionError(error.message);}); return ()=>{active=false;}; }, []);
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener("hashchange", update); return () => window.removeEventListener("hashchange", update); }, []);
-  useEffect(() => { document.title = hash.startsWith("#departments") ? "Ethikcorp Superbrain | Department workspaces" : "Superbrain PM | Ethikcorp pilot"; }, [hash]);
+  useEffect(() => {
+    const clean = hash.replace(/^#/, "");
+    document.title = clean.startsWith("departments") ? "Departments · Aqion SuperbrainOS" : clean.startsWith("ceo") ? "CEO desk · Aqion SuperbrainOS" : clean.startsWith("knowledge") ? "Knowledge · Aqion SuperbrainOS" : "Formation · Aqion SuperbrainOS";
+  }, [hash]);
   if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Superbrain</h1><p>{sessionError || "Opening your cloud workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
-  return hash.startsWith("#departments") ? <DepartmentsApp hash={hash} sourceRecords={loadState().records} /> : <App />;
+  const clean = hash.replace(/^#/, "");
+  const stage = clean.startsWith("pm/") ? clean.slice(3) : "overview";
+  const pm = loadState();
+  let body = <App initialStage={stage} />;
+  if (clean.startsWith("departments")) body = <DepartmentsApp hash={hash} sourceRecords={pm.records} />;
+  else if (clean.startsWith("knowledge")) body = <KnowledgeAdmin records={pm.records} />;
+  else if (clean.startsWith("ceo")) body = <CeoDesk />;
+  return <PortalFrame hash={hash || "#pm"}>{body}</PortalFrame>;
 }
 createRoot(document.getElementById("root")!).render(<React.StrictMode><RootApp /></React.StrictMode>);
