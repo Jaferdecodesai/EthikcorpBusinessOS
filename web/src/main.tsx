@@ -16,7 +16,6 @@ import { cloudPreview, ensureCloudSession, HostingNotice } from "./hosting";
 import { PortalFrame } from "./portal-frame";
 import { CeoDesk } from "./ceo";
 import { KnowledgeAdmin } from "./knowledge";
-import { GuideDock } from "./guide";
 import "./portal.css";
 
 type SourceRecord = { status: "not-started" | "located" | "uploaded" | "excluded"; owner: string; locator: string; approvalRef: string; note: string; githubPath?: string; fileName?: string };
@@ -155,7 +154,7 @@ function App({ initialStage = "overview" }: { initialStage?: string }) {
   return (
     <div className="pm-workspace">
       <div className="vh">
-        <div><div className="eyebrow">Customer formation journey</div><h1>{selectedStage ? selectedStage.name : "From records to a reviewed brain"}</h1><p className="sub">The PM walks the customer from inventory through cleaning, vectors, evaluation and a fine-tune decision. Checklist progress is {completed} of {total}. A tick is not acceptance, and offline operation is not required.</p></div>
+        <div><div className="eyebrow">Customer formation journey</div><h1>{selectedStage ? selectedStage.name : "From records to a reviewed brain"}</h1><p className="sub">Work through the nine stages. Checklist progress is {completed} of {total}. A tick records evidence. It does not accept the brain or open an index.</p></div>
         <button className="btn ghost" onClick={exportPlan}>Export plan</button>
       </div>
       <ol className="stepper" aria-label="Formation stages">{stages.map((stage, index) => {
@@ -164,11 +163,10 @@ function App({ initialStage = "overview" }: { initialStage?: string }) {
         return <li key={stage.id} className={cls}><button type="button" onClick={() => goStage(stage.id)} aria-current={active === stage.id ? "step" : undefined}><b>{index + 1}</b><span>{stage.short}</span></button></li>;
       })}</ol>
       <HostingNotice />
-      <div className="pm-grid">
       <main className="main">
         <div className="content">
           {active === "overview" ? <>
-            <div className="grid g4" style={{ marginBottom: 16 }}>{stages.map((stage) => { const p = stageProgress(stage, state.checked); return <button className="card kpi pad" key={stage.id} onClick={() => goStage(stage.id)} style={{ textAlign: "left", cursor: "pointer", border: "1px solid var(--line)" }}><div className="l">{stage.short}</div><div className="v">{p.done}/{p.total}</div><div className="x">{stage.name}</div></button>; })}</div>
+            <div className="stage-board">{stages.map((stage) => { const p = stageProgress(stage, state.checked); return <button className="card kpi pad" key={stage.id} onClick={() => goStage(stage.id)}><div className="l">{stage.short}</div><div className="v">{p.done}/{p.total}</div><div className="x">{stage.name}</div></button>; })}</div>
             <Pipeline />
           </> : selectedStage ? <>
             {active === "discovery" && <TemplateBanner />}
@@ -183,8 +181,6 @@ function App({ initialStage = "overview" }: { initialStage?: string }) {
         </div>
       <aside className="checklist-panel card" aria-label="Stage checklist" style={{ marginTop: 16 }}><div className="checklist-kicker">ONE CHECKLIST</div><h2>{checklistStage.name}</h2><p>Select a task to see its work area. Use the separate checkbox only after its evidence has been approved.</p><div className="checklist-progress"><strong>{stageProgress(checklistStage, state.checked).done} / {checklistStage.tasks.length}</strong><span>tasks completed</span></div><div className="checklist-items">{checklistStage.tasks.map((task, i) => <div className={selectedStage?.id === checklistStage.id && selectedTask?.id === task.id ? "checklist-item selected" : "checklist-item"} key={task.id}><input type="checkbox" aria-label={`Mark ${task.label} complete`} checked={Boolean(state.checked[task.id])} onChange={() => toggleTask(task.id)} /><button type="button" onClick={() => openTask(checklistStage, task.id)}><small>0{i + 1} · {state.checked[task.id] ? "Complete" : "To do"}</small><strong>{task.label}</strong><span>View task →</span></button></div>)}</div><div className="checklist-note"><strong>Gate review</strong><p>Checklist completion records progress; it does not grant data or access approval.</p>{state.lastSync && <small>Last GitHub plan sync: {new Date(state.lastSync).toLocaleString("en-AE")}</small>}</div></aside>
       </main>
-      <GuideDock checked={state.checked} records={state.records} githubReady={serverReady} />
-      </div>
       {message && <div role="status" className="toast"><span>{message}</span><button aria-label="Dismiss message" onClick={() => setMessage("")}>×</button></div>}
     </div>
   );

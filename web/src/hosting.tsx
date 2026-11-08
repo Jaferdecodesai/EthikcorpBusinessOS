@@ -11,5 +11,5 @@ export function ensureCloudSession(): Promise<void> {
   return sessionRequest;
 }
 export function HostingNotice() {
-  return cloudPreview ? <div className="hosting-notice" role="note"><strong>Global front end.</strong><span>This Cloudflare preview is not the company data plane. UAE processing, storage, backups, logs, embeddings and inference are not configured. Offline operation is not required.</span></div> : null;
+  return cloudPreview ? <div className="hosting-notice" role="note"><strong>Global front end.</strong><span>This Cloudflare preview is not the company data plane. UAE processing, storage, backups, logs, embeddings and inference are not configured.</span></div> : null;
 }
