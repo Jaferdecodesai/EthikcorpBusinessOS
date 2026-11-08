@@ -8,7 +8,7 @@ export function PortalFrame({ hash, children }: { hash: string; children: React.
   const title = place === "ceo" ? "CEO desk" : place === "knowledge" ? "Knowledge" : place === "departments" ? (catalog.find((d) => d.id === dept)?.name || (dept === "runtime" ? "Runtime" : "Departments")) : "Formation";
   return <div className="portal">
     <aside className="side" aria-label="Places">
-      <a className="brand" href="#ceo"><span className="mark">AQ</span><span><b>Aqion SuperbrainOS</b><small>Businessbots · pilot</small></span></a>
+      <a className="brand" href="#ceo"><span className="mark">AQ</span><span><b>Aqion Superbrain</b><small>Businessbots · pilot</small></span></a>
       <div className="navlabel">Operating picture</div>
       <a className={place === "ceo" ? "nav on" : "nav"} href="#ceo" aria-current={place === "ceo" ? "page" : undefined}>CEO desk</a>
       <a className={place === "pm" ? "nav on" : "nav"} href="#pm" aria-current={place === "pm" ? "page" : undefined}>Formation journey</a>
@@ -20,7 +20,7 @@ export function PortalFrame({ hash, children }: { hash: string; children: React.
     </aside>
     <div className="maincol">
       <header className="topbar">
-        <div className="ctx"><span>Ethikcorp pilot</span><span aria-hidden="true">/</span><b>{title}</b></div>
+        <div className="ctx"><span>Aqion Superbrain</span><span aria-hidden="true">/</span><b>{title}</b></div>
         <div className="pills"><span className="pill a"><i />Demo · not live integrations</span><span className="pill r"><i />UAE data plane unverified</span></div>
       </header>
       <div className="page">{children}</div>

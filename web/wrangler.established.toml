@@ -1,0 +1,27 @@
+# Update path for the Worker that already exists.
+# Do not add [[migrations]]. PreviewWorkspace and its SQLite namespace already exist.
+# BUILD_ID matches the live plain-text binding read on 8 November 2026.
+# SESSION_SECRET is not in this file. Wrangler keeps existing secrets on deploy.
+name = "ethikcorp-superbrain"
+main = "cloudflare/worker.mjs"
+compatibility_date = "2026-10-19"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+account_id = "80114e86d2b31e6086ffa21c0ecda3ec"
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "404-page"
+
+[[durable_objects.bindings]]
+name = "PREVIEW_WORKSPACES"
+class_name = "PreviewWorkspace"
+
+[vars]
+BUILD_ID = "2026-10-30-google-bridge-preview"
+
+[observability]
+enabled = false

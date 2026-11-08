@@ -1,6 +1,31 @@
 # ethikcorp-superbrain deployment handoff
 
-This package is a tested build of the existing Worker. It was not deployed. It contains no Cloudflare token, no `SESSION_SECRET`, and no local `.data` store.
+This package is a tested build of the existing Worker. It was not deployed from this environment. It contains no Cloudflare token, no `SESSION_SECRET`, and no local `.data` store.
+
+The parent Cloudflare connector cannot set the `Authorization` header its `cloudflare.request` helper would need for `POST /accounts/{account_id}/workers/assets/upload`. No asset upload session was opened and the live Worker was not changed. Use Wrangler, which performs that header itself, or a Git-connected Workers Build whose deploy command is the established script below. Do not point either at `wrangler.toml`.
+
+## Supported publish command
+
+From `web/`, after the owner has run `npx wrangler login` in a browser, or has set `CLOUDFLARE_API_TOKEN` in the shell or in the GitHub Actions secret:
+
+```bash
+npm test
+npm run cloudflare:publish-established
+```
+
+That command builds with `VITE_HOSTING=cloudflare` and runs:
+
+```bash
+wrangler deploy --config wrangler.established.toml --keep-vars
+```
+
+`wrangler.established.toml` has no `[[migrations]]` block. `BUILD_ID` is `2026-10-30-google-bridge-preview`, the live plain-text value. `--keep-vars` stops Wrangler from deleting vars that are not listed. A normal `wrangler deploy` keeps existing secrets, so `SESSION_SECRET` stays. Do not run `wrangler secret put`.
+
+A dry run of that command on Wrangler 4.151.0 listed `PREVIEW_WORKSPACES` (`PreviewWorkspace`), `ASSETS`, and the live `BUILD_ID`. It did not list a migration. Wrangler warned that there is no `exports` entry for the Durable Object. Do not add that block for this update. `exports` reconciliation is a different lifecycle from the `v1` migration that created namespace `52135fb6013244208cf1004c41aa9187`.
+
+`.github/workflows/publish-ethikcorp-superbrain.yml` is `workflow_dispatch` only. It does not run on push. It is not usable until the owner adds the Actions secret `CLOUDFLARE_API_TOKEN`. Workers Builds has no configuration for script tag `b9b647934cb54e578903b1a19dccfbdd` (HTTP 404, code 12040). Creating one requires `script_tag`, GitHub `repo_id`, provider account ids, and a `build_token_uuid` from the Cloudflare dashboard. Those were not created here. If the owner connects Builds later, set the root directory to `web`, the build command to `npm ci && npm test && npm run build:cloudflare`, and the deploy command to `npx wrangler deploy --config wrangler.established.toml --keep-vars`.
+
+This environment’s Wrangler replied “You are not authenticated.” `wrangler login` is the owner step. Do not paste a token into the repository.
 
 Source commit: `48d92ba94a1799a3a6cfbecaca05222c058caee8`  
 Built: 2026-11-08T19:41:33Z  

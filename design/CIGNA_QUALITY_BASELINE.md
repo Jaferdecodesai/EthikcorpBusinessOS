@@ -1,6 +1,6 @@
 # Cigna quality baseline
 
-Inspected 8 November 2026 at https://cigna-quote-in-seconds.aqionlabs.workers.dev/. The Cigna app was not modified. It is the minimum visual quality for SuperbrainOS. Looking like it does not make this product enterprise-mature.
+Inspected 8 November 2026 at https://cigna-quote-in-seconds.aqionlabs.workers.dev/. The Cigna app was not modified. It is the minimum visual quality for Aqion Superbrain. Looking like it does not make this product enterprise-mature.
 
 ## What the rendered app actually does
 
@@ -20,6 +20,8 @@ Desktop 1440 and mobile 390. Census, rate, underwriting, reports and compliance 
 - Mobile: the sidebar becomes one scrolling row. The stepper keeps numbers and drops labels. Cards stack.
 
 Cigna’s muted `#7A7F99` measures about 3.9:1 on white, and the green and amber pill text also miss 4.5:1. Superbrain keeps the same palette and darkens those text roles (`#555A72`, `#046B3C`, `#8A5A12`, `#9F2422`) so the small text clears 4.5:1. Button blue `#0033FF` with white is 7.2:1.
+
+The customer-facing product name is Aqion Superbrain. Businessbots remains the department module name.
 
 ## How this portal uses it
 

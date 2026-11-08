@@ -1,0 +1,27 @@
+name: Publish ethikcorp-superbrain
+
+# Manual only. Nothing runs on push. The owner adds CLOUDFLARE_API_TOKEN
+# in GitHub Actions secrets before dispatching. The token needs Workers
+# Scripts edit on the existing account. This workflow does not create it.
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: Publish the established Worker
+        run: npm run cloudflare:publish-established
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

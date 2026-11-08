@@ -1,6 +1,6 @@
 # AqionLLM
 
-AqionCloud Business Superbrain, with Ethikcorp as the first pilot. The active architecture is **Superbrain PM and department workspaces + Sim workflows + Lobu department leads**. This repository contains the restored pre-Google portal, editable docs, runtime starter files, and blank client intake templates.
+Aqion Superbrain, with Ethikcorp as the first pilot. Businessbots is the department module. The active architecture is **Superbrain PM and department workspaces + Sim workflows + Lobu department leads**. This repository contains the restored pre-Google portal, editable docs, runtime starter files, and blank client intake templates.
 
 ## Run the preview
 

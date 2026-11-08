@@ -18,17 +18,16 @@ A signed, HttpOnly, Secure, SameSite cookie scopes each browser to its own cloud
 
 The public preview has no GitHub token, Sim/Lobu key, model provider, company-source retrieval or employee identity integration. Its runtime route is intentionally unconfigured. It is a global front end. It does not certify UAE data residency, and offline operation is not a requirement. The local private-repository connector remains available separately.
 
-## Publishing a verified build
+## Publishing the established Worker
 
-Do this from a machine that already holds the Cloudflare account login. Do not copy a token into the repository or into a chat.
+`wrangler.toml` is the original first-create file. It still has migration tag `v1` and `BUILD_ID = "2026-10-25-cloudflare-v1"`. Do not run `wrangler deploy` against that file for the Worker that is already live. That would resend the migration and replace the live `BUILD_ID`.
 
-1. `npm test`
-2. `npm run build:cloudflare`
-3. Confirm `wrangler.toml` still names worker `ethikcorp-superbrain`, the existing account, and the `PREVIEW_WORKSPACES` Durable Object. Do not create a new class or a new migration.
-4. Leave the existing `SESSION_SECRET` in place. Replacing it drops browsers out of their current workspaces.
-5. `npm run cloudflare:dev` for a local Worker check when the account is available.
-6. `npm run cloudflare:deploy` only after the preview owner agrees. The command publishes the current `dist/` to the existing Worker.
+The update command is `npm run cloudflare:publish-established`. It uses `wrangler.established.toml`, which has no migrations block and sets `BUILD_ID` to the live value `2026-10-30-google-bridge-preview`. `--keep-vars` is set so vars that are not in the file are not deleted. Wrangler keeps existing secrets, including `SESSION_SECRET`, unless a secret command is run. Do not run `wrangler secret put SESSION_SECRET`.
 
-This environment had no Cloudflare API token and did not deploy. The reproducible bundle is the output of `npm run build:cloudflare`.
+The Durable Object binding stays `PREVIEW_WORKSPACES` / `PreviewWorkspace`. The live namespace id is `52135fb6013244208cf1004c41aa9187`. This config does not create a namespace and does not delete stored workspace rows.
+
+There is no GitHub Actions deploy on push. `.github/workflows/publish-ethikcorp-superbrain.yml` runs only from the Actions “Run workflow” button, and only after the owner stores `CLOUDFLARE_API_TOKEN` as an Actions secret. Workers Builds is not connected to this Worker. Creating one needs a build token and a GitHub repository connection from the Cloudflare dashboard. Do not point that build at `wrangler.toml`.
+
+This environment’s Wrangler is not signed in. `wrangler login` has to be completed by the account owner in a browser. Do not paste an API token into the repository.
 
 API writes require the same origin and JSON, and stored preview state is capped at 2 MB per browser workspace. Worker logs are disabled by default. Do not enable real company integrations without the separately agreed identity, source permissions and hosting policy.

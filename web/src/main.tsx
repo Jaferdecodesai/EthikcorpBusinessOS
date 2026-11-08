@@ -268,9 +268,9 @@ function RootApp() {
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener("hashchange", update); return () => window.removeEventListener("hashchange", update); }, []);
   useEffect(() => {
     const clean = hash.replace(/^#/, "");
-    document.title = clean.startsWith("departments") ? "Departments · Aqion SuperbrainOS" : clean.startsWith("ceo") ? "CEO desk · Aqion SuperbrainOS" : clean.startsWith("knowledge") ? "Knowledge · Aqion SuperbrainOS" : "Formation · Aqion SuperbrainOS";
+    document.title = clean.startsWith("departments") ? "Departments · Aqion Superbrain" : clean.startsWith("ceo") ? "CEO desk · Aqion Superbrain" : clean.startsWith("knowledge") ? "Knowledge · Aqion Superbrain" : "Formation · Aqion Superbrain";
   }, [hash]);
-  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Superbrain</h1><p>{sessionError || "Opening your cloud workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
+  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Aqion Superbrain</h1><p>{sessionError || "Opening your cloud workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
   const clean = hash.replace(/^#/, "");
   const stage = clean.startsWith("pm/") ? clean.slice(3) : "overview";
   const pm = loadState();
