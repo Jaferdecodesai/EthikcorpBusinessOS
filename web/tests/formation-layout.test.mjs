@@ -18,3 +18,9 @@ test("formation stage cards use a balanced three-column group", () => {
   assert.match(app, /className="stage-board"/);
   assert.match(css, /\.stage-board\s*\{[^}]*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
 });
+
+test("status pills wrap onto their own row instead of covering the breadcrumb", () => {
+  assert.match(css, /\.topbar\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.ctx\s*\{[^}]*min-width:\s*min\(100%,\s*max-content\)/);
+  assert.match(css, /\.pills\s*\{[^}]*margin-left:\s*auto/);
+});
