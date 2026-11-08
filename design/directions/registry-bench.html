@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Registry Bench — Source register</title>
+<style>
+  :root {
+    --ink: #121212;
+    --muted: #5c5c5c;
+    --faint: #5f5f5f;
+    --line: #e6e6e6;
+    --canvas: #ffffff;
+    --wash: #fafafa;
+    --select: #f3f6fb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1440px; height: 900px; overflow: hidden; background: var(--canvas); color: var(--ink); font-family: Inter, "Noto Naskh Arabic", sans-serif; font-size: 13px; line-height: 1.4; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
+  :focus-visible { outline: 2px solid #121212; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  .app { height: 900px; display: grid; grid-template-rows: 28px 1fr; }
+  .notice { display: flex; align-items: center; gap: 16px; padding: 0 20px; background: #121212; color: white; font-size: 12px; }
+  .notice span { color: #d0d0d0; }
+  .frame { display: grid; grid-template-columns: 196px 1fr; min-height: 0; }
+  .side { border-right: 1px solid var(--line); padding: 18px 14px; }
+  .brand strong { display: block; font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+  .brand small { color: var(--faint); font-size: 11px; }
+  .kicker { margin: 18px 0 6px; font-size: 11px; color: var(--faint); }
+  .nav-item { display: block; width: 100%; padding: 6px 0; color: #333; text-align: left; }
+  .nav-item[aria-current="page"] { font-weight: 600; box-shadow: inset 0 -1px 0 #121212; }
+  .work { display: flex; flex-direction: column; min-width: 0; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; padding: 16px 20px 12px; }
+  .head h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.03em; }
+  .head p { margin: 4px 0 0; color: var(--muted); }
+  .actions { display: flex; gap: 8px; }
+  .ghost, .solid { height: 30px; padding: 0 10px; border-radius: 6px; border: 1px solid #d4d4d4; }
+  .solid { background: #121212; color: white; border-color: #121212; }
+  .banner { margin: 0 20px 12px; display: grid; grid-template-columns: 4px 1fr auto; align-items: center; border: 1px solid var(--line); min-height: 56px; }
+  .banner i { background: #b45309; align-self: stretch; }
+  .banner div { padding: 8px 12px; }
+  .banner strong { display: block; font-weight: 600; }
+  .banner span { color: var(--muted); }
+  .banner button { margin-right: 12px; height: 28px; padding: 0 10px; border: 1px solid #121212; border-radius: 6px; }
+  .filters { display: flex; gap: 6px; padding: 0 20px 10px; }
+  .chip { height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: white; }
+  .chip[aria-pressed="true"] { border-color: #121212; color: #121212; }
+  table { width: calc(100% - 40px); margin: 0 20px; border-collapse: collapse; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; height: 36px; }
+  tr[aria-selected="true"] { background: var(--select); }
+  .id { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .neutral { color: #3f3f46; background: #f4f4f5; }
+  .warning { color: #92400e; background: #ffedd5; }
+  .negative { color: #991b1b; background: #fee2e2; }
+  .positive { color: #166534; background: #dcfce7; }
+  .info { color: #1e3a8a; background: #dbeafe; }
+  .urgent { color: #9a3412; background: #ffedd5; }
+  .section td { background: var(--wash); color: var(--faint); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; height: 28px; }
+  .note { margin: 12px 20px 0; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="notice"><b>Demo preview</b><span>Register of catalogue categories. No company files, no employee account, no live index. Specimen rows demonstrate status language only.</span></div>
+  <div class="frame">
+    <nav class="side" aria-label="Register">
+      <div class="brand"><strong>Aqion SuperbrainOS</strong><small>Source register</small></div>
+      <div class="kicker">Administration</div>
+      <button class="nav-item" aria-current="page">Source register</button>
+      <button class="nav-item">Permissions</button>
+      <button class="nav-item">Retrieval eval</button>
+      <button class="nav-item">Fine-tune · not started</button>
+      <div class="kicker">Operations</div>
+      <button class="nav-item">Decision desk</button>
+      <button class="nav-item">Departments</button>
+      <button class="nav-item">Activity log</button>
+    </nav>
+    <main class="work">
+      <header class="head">
+        <div><h1>Source register</h1><p>18 categories from the pilot catalogue. Counts are catalogue rows, not ingested documents.</p></div>
+        <div class="actions"><button class="ghost">Export metadata</button><button class="solid">Record a decision</button></div>
+      </header>
+      <section class="banner" aria-label="Whose turn">
+        <i aria-hidden="true"></i>
+        <div><strong>Turn: source owner</strong><span>Next action for Company profile &amp; services: name an owner or mark the category excluded. This does not approve a file or open retrieval.</span></div>
+        <button>Assign owner</button>
+      </section>
+      <div class="filters" role="toolbar">
+        <button class="chip" aria-pressed="true">All</button>
+        <button class="chip">Needs owner</button>
+        <button class="chip">Metadata only</button>
+        <button class="chip">Upload eligible</button>
+      </div>
+      <table>
+        <thead><tr><th>Record</th><th>Class</th><th>Owner</th><th>Intake</th><th>Ingestion</th><th>Permission</th><th>Freshness</th></tr></thead>
+        <tbody>
+          <tr aria-selected="true"><td><div>Company profile &amp; services</div><span class="id">profile</span></td><td>Public</td><td>Unassigned</td><td><span class="pill neutral">Not started</span></td><td><span class="pill neutral">Not connected</span></td><td><span class="pill info">Upload after approval</span></td><td>Unknown</td></tr>
+          <tr><td><div>Policies &amp; handbooks</div><span class="id">policies</span></td><td>Internal</td><td>Unassigned</td><td><span class="pill neutral">Not started</span></td><td><span class="pill neutral">Not connected</span></td><td><span class="pill info">Upload after approval</span></td><td>Unknown</td></tr>
+          <tr><td><div>SOPs &amp; checklists</div><span class="id">sops</span></td><td>Internal</td><td>Unassigned</td><td><span class="pill neutral">Not started</span></td><td><span class="pill neutral">Not connected</span></td><td><span class="pill info">Upload after approval</span></td><td>Unknown</td></tr>
+          <tr><td><div>Marketing assets</div><span class="id">marketing</span></td><td>Public / Internal</td><td>Unassigned</td><td><span class="pill neutral">Not started</span></td><td><span class="pill neutral">Not connected</span></td><td><span class="pill info">Upload after approval</span></td><td>Unknown</td></tr>
+          <tr><td><div>HR &amp; people records</div><span class="id">hr</span></td><td>Restricted</td><td>Unassigned</td><td><span class="pill urgent">Metadata only</span></td><td><span class="pill negative">Upload denied</span></td><td><span class="pill negative">Excluded from pilot upload</span></td><td>Unknown</td></tr>
+          <tr><td><div>Invoices &amp; financials</div><span class="id">finance</span></td><td>Restricted</td><td>Unassigned</td><td><span class="pill urgent">Metadata only</span></td><td><span class="pill negative">Upload denied</span></td><td><span class="pill negative">Excluded from pilot upload</span></td><td>Unknown</td></tr>
+          <tr><td><div>Contracts &amp; NDAs</div><span class="id">contracts</span></td><td>Restricted</td><td>Unassigned</td><td><span class="pill urgent">Metadata only</span></td><td><span class="pill negative">Upload denied</span></td><td><span class="pill negative">Excluded from pilot upload</span></td><td>Unknown</td></tr>
+          <tr class="section"><td colspan="7">Interface specimens · not stored records</td></tr>
+          <tr lang="ar" dir="auto"><td><div>سياسات الإجازات</div><span class="id">specimen</span></td><td>Internal</td><td>Specimen</td><td><span class="pill warning">Located</span></td><td><span class="pill warning">Pending</span></td><td><span class="pill info">Awaiting audience</span></td><td>Unverified</td></tr>
+          <tr><td><div>Embedding job · no provider</div><span class="id">specimen</span></td><td>—</td><td>Specimen</td><td><span class="pill warning">Received</span></td><td><span class="pill info">Processing</span></td><td><span class="pill warning">Route not approved</span></td><td>—</td></tr>
+          <tr><td><div>Curated page · sample</div><span class="id">specimen</span></td><td>Public</td><td>Specimen</td><td><span class="pill positive">Approved</span></td><td><span class="pill positive">Ready</span></td><td><span class="pill warning">Eval not run</span></td><td>Specimen</td></tr>
+          <tr><td><div>Private repository test</div><span class="id">specimen</span></td><td>—</td><td>Specimen</td><td><span class="pill negative">Failed</span></td><td><span class="pill negative">Failed</span></td><td><span class="pill neutral">Token absent</span></td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p class="note">GitHub token is not configured. Retrieval evaluation and fine-tuning are separate rows in the navigation. Fine-tuning has not started and does not keep sources current.</p>
+    </main>
+  </div>
+</div>
+</body>
+</html>

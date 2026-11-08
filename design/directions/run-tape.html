@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Run Tape — Activity</title>
+<style>
+  :root {
+    --ink: #171717;
+    --muted: #666666;
+    --faint: #5f5f5f;
+    --line: #ebebeb;
+    --canvas: #ffffff;
+    --log: #fafafa;
+    --queued: #a1a1aa;
+    --run: #b45309;
+    --ready: #157f3d;
+    --fail: #d92d20;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1440px; height: 900px; overflow: hidden; background: var(--canvas); color: var(--ink); font-family: Inter, "Noto Naskh Arabic", sans-serif; font-size: 13px; line-height: 1.45; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; }
+  :focus-visible { outline: 2px solid #171717; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  .app { height: 900px; display: grid; grid-template-rows: 28px 1fr; }
+  .notice { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #171717; color: white; font-size: 12px; }
+  .notice span { color: #d4d4d4; }
+  .frame { display: grid; grid-template-columns: 420px 1fr; min-height: 0; }
+  .list { border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  .list header, .detail header { height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--line); }
+  .list h1, .detail h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+  .list header span, .detail header span { color: var(--faint); font-size: 12px; }
+  .run { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; width: 100%; padding: 10px 16px; border-bottom: 1px solid var(--line); align-items: start; }
+  .run[aria-selected="true"] { background: #fafafa; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--queued); }
+  .dot.run { background: var(--run); }
+  .dot.ready { background: var(--ready); }
+  .dot.fail { background: var(--fail); }
+  .run strong { display: block; font-weight: 600; }
+  .run small { color: var(--muted); }
+  .when { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .empty-note { padding: 14px 16px; color: var(--muted); }
+  .detail { display: grid; grid-template-rows: 56px auto auto 1fr auto; min-width: 0; }
+  .statusline { display: flex; gap: 18px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .statusline div { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .statusline .on { color: var(--ink); font-weight: 600; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); }
+  .facts div { padding: 10px 16px; border-right: 1px solid var(--line); }
+  .facts div:last-child { border-right: 0; }
+  .facts small { display: block; color: var(--faint); font-size: 11px; }
+  .log { margin: 0; background: var(--log); color: #242424; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; line-height: 1.6; padding: 12px 16px; overflow: hidden; border-bottom: 1px solid var(--line); }
+  .log .dim { color: #5e5e5e; }
+  .log .bad { color: var(--fail); }
+  .cite { padding: 12px 16px 16px; }
+  .cite strong { display: block; margin-bottom: 4px; }
+  .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="notice"><b>Demo preview</b><span>Activity tape for local templates and disconnected routes. Nothing here was executed against a model, Sim, Lobu or a company corpus.</span></div>
+  <div class="frame">
+    <section class="list" aria-label="Runs">
+      <header><h1>Runs</h1><span>Newest specimen first</span></header>
+      <button class="run" aria-selected="true"><span class="dot ready"></span><span><strong>Sales proposal · local template</strong><small>Sales · rules only · ready for review</small></span><span class="when">Specimen</span></button>
+      <button class="run"><span class="dot fail"></span><span><strong>Sales proposal · Sim</strong><small>Sales · start refused · disconnected</small></span><span class="when">Specimen</span></button>
+      <button class="run"><span class="dot"></span><span><strong>Embedding route</strong><small>Knowledge · queued · provider not approved</small></span><span class="when">Not run</span></button>
+      <button class="run"><span class="dot"></span><span><strong>Retrieval evaluation</strong><small>Knowledge · no golden set supplied</small></span><span class="when">Not run</span></button>
+      <button class="run"><span class="dot run"></span><span><strong>Needs reconciliation</strong><small>Specimen · uncertain remote start · do not retry</small></span><span class="when">Specimen</span></button>
+      <button class="run"><span class="dot"></span><span><strong>Fine-tune</strong><small>Not a current path · no training set</small></span><span class="when">Not started</span></button>
+      <p class="empty-note">No production runs are stored. Department leads are not on a schedule. Pausing a lead blocks a new local request; it does not restart an old bot.</p>
+    </section>
+    <article class="detail">
+      <header><h1>Sales proposal · local template</h1><span>Draft · not sent</span></header>
+      <div class="statusline" aria-label="Run status">
+        <div><span class="dot"></span>Queued</div>
+        <div><span class="dot run"></span>Running</div>
+        <div class="on"><span class="dot ready"></span>Ready for review</div>
+        <div><span class="dot fail"></span>Failed</div>
+      </div>
+      <div class="facts">
+        <div><small>Route</small>Local planner</div>
+        <div><small>Department</small>Sales &amp; BD</div>
+        <div><small>Review</small>Awaiting a named person</div>
+        <div><small>External send</small>Closed</div>
+      </div>
+      <pre class="log"><span class="dim">local template · no model call · no company record</span>
+Client objective                 not supplied
+Proposed scope and deliverables not supplied
+Evidence and approved claims    not supplied
+Assumptions and exclusions      not supplied
+Commercial inputs required      not supplied
+Reviewer and delivery handoff   not supplied
+<span class="bad">Sim execute was not called. RUNTIME_EGRESS_APPROVED is false.</span>
+Output hash would bind the review. Approval stays a local draft.
+Recovery: if a remote start is uncertain, reconcile the original run id. Do not start it again.</pre>
+      <section class="cite">
+        <strong>Sources</strong>
+        No sources. Retrieval is disconnected, so this draft has no citations and cannot grant access to a document.
+        <div><span class="chip">No sources selected</span></div>
+      </section>
+    </article>
+  </div>
+</div>
+</body>
+</html>

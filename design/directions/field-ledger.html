@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Field Ledger — Sources</title>
+<style>
+  :root {
+    --canvas: #f7f6f3;
+    --sidebar: #eceae4;
+    --ink: #1c1917;
+    --muted: #5f5c56;
+    --faint: #6a675f;
+    --line: #e2e0d9;
+    --line-strong: #d2cfc6;
+    --select: #e7e5de;
+    --paper: #fbfbf8;
+    --st-idle: #5f5c56;
+    --st-pending: #8a4b08;
+    --st-run: #0f5f78;
+    --st-ready: #166534;
+    --st-fail: #b42318;
+    --st-deny: #9a3412;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1440px; height: 900px; overflow: hidden; background: var(--canvas); color: var(--ink); font-family: Inter, "Noto Naskh Arabic", sans-serif; font-size: 13px; line-height: 1.4; }
+  button, input { font: inherit; color: inherit; }
+  button { background: none; border: 0; padding: 0; text-align: left; }
+  :focus-visible { outline: 2px solid #1c1917; outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  .app { display: grid; grid-template-rows: 28px 1fr; height: 900px; }
+  .notice { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #1c1917; color: #f7f6f3; font-size: 12px; }
+  .notice b { font-weight: 600; }
+  .notice span { color: #c9c4ba; }
+  .frame { display: grid; grid-template-columns: 216px minmax(0, 1fr) 292px; min-height: 0; }
+  .side { background: var(--sidebar); color: #4a4742; padding: 16px 10px; display: flex; flex-direction: column; }
+  .brand { padding: 0 8px 14px; }
+  .brand strong { display: block; font-size: 14px; letter-spacing: -0.02em; color: var(--ink); font-weight: 600; }
+  .brand small { color: var(--faint); font-size: 11px; }
+  .kicker { margin: 12px 8px 6px; font-size: 11px; color: var(--faint); }
+  .nav-item { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 28px; padding: 0 8px; border-radius: 6px; color: #3f3c37; }
+  .nav-item[aria-current="page"] { background: #e3e0d8; color: var(--ink); font-weight: 600; }
+  .side-foot { margin-top: auto; padding: 10px 8px 0; border-top: 1px solid var(--line-strong); display: grid; gap: 6px; }
+  .side-foot div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .side-foot i { font-style: normal; color: var(--st-deny); }
+  .work { display: flex; flex-direction: column; min-width: 0; background: var(--canvas); }
+  .head { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+  .crumbs { color: var(--muted); }
+  .crumbs b { color: var(--ink); font-weight: 600; }
+  .head-actions { display: flex; gap: 8px; align-items: center; }
+  .ghost, .solid { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line-strong); }
+  .solid { background: var(--ink); color: #f7f6f3; border-color: var(--ink); }
+  .filters { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  .filters button { height: 26px; padding: 0 8px; border-radius: 6px; color: var(--muted); }
+  .filters button[aria-pressed="true"] { background: var(--select); color: var(--ink); }
+  .row { display: grid; grid-template-columns: 16px 72px minmax(0, 1fr) 148px 132px 118px; gap: 8px; align-items: center; height: 36px; padding: 0 16px; border-bottom: 1px solid var(--line); width: 100%; }
+  .row[aria-selected="true"] { background: var(--select); }
+  .row:hover { background: #f1efe9; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-idle); }
+  .dot.pending { background: var(--st-pending); }
+  .dot.run { background: var(--st-run); }
+  .dot.ready { background: var(--st-ready); }
+  .dot.fail { background: var(--st-fail); }
+  .dot.deny { background: var(--st-deny); }
+  .id { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta, .state { color: var(--muted); white-space: nowrap; }
+  .state { color: var(--ink); }
+  .split { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 16px; color: var(--faint); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+  .rail { border-left: 1px solid var(--line); background: var(--paper); padding: 16px 16px 12px; display: flex; flex-direction: column; min-width: 0; }
+  .rail h1 { margin: 0 0 4px; font-size: 16px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; text-wrap: balance; }
+  .rail .sub { margin: 0 0 14px; color: var(--muted); }
+  dl { margin: 0; display: grid; grid-template-columns: 108px 1fr; gap: 7px 10px; }
+  dt { color: var(--faint); }
+  dd { margin: 0; }
+  .rail footer { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .list-foot { margin-top: auto; height: 32px; display: flex; align-items: center; padding: 0 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .keys { color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="notice" role="note"><b>Demo preview</b><span>Rules and templates only. Employee sign-in, Sim, Lobu, retrieval and UAE residency are not configured. Rows under “Specimens” are interface states, not stored records.</span></div>
+  <div class="frame">
+    <aside class="side" aria-label="Places">
+      <div class="brand"><strong>Aqion SuperbrainOS</strong><small>Businessbots · pilot shell</small></div>
+      <div class="kicker">Places</div>
+      <button class="nav-item" aria-current="page">Sources</button>
+      <button class="nav-item">Decision desk</button>
+      <button class="nav-item">Departments <span>9</span></button>
+      <button class="nav-item">Activity</button>
+      <div class="kicker">Knowledge plane</div>
+      <button class="nav-item">Inventory</button>
+      <button class="nav-item">Retrieval eval</button>
+      <button class="nav-item">Fine-tune <span>off</span></button>
+      <div class="side-foot">
+        <div>Sim <i>disconnected</i></div>
+        <div>Lobu <i>disconnected</i></div>
+        <div>Index <i>not built</i></div>
+      </div>
+    </aside>
+    <main class="work">
+      <header class="head">
+        <div class="crumbs">Knowledge / <b>Sources</b></div>
+        <div class="head-actions"><span class="keys">↑↓ · Enter · E</span><button class="ghost">Export plan</button><button class="solid">Assign owner</button></div>
+      </header>
+      <div class="filters" role="toolbar" aria-label="Source filters">
+        <button aria-pressed="true">All 18</button>
+        <button>Unassigned</button>
+        <button>Metadata only</button>
+        <button>Not indexed</button>
+      </div>
+      <button class="row" aria-selected="true">
+        <span class="dot" aria-hidden="true"></span><span class="id">SRC-01</span><span class="title">Company profile &amp; services</span><span class="meta">Marketing · prompt</span><span class="state">Not started</span><span class="meta">Not indexed</span>
+      </button>
+      <button class="row"><span class="dot"></span><span class="id">SRC-02</span><span class="title">Policies &amp; handbooks</span><span class="meta">HR · prompt</span><span class="state">Not started</span><span class="meta">Not indexed</span></button>
+      <button class="row"><span class="dot"></span><span class="id">SRC-03</span><span class="title">SOPs &amp; checklists</span><span class="meta">Operations · prompt</span><span class="state">Not started</span><span class="meta">Not indexed</span></button>
+      <button class="row"><span class="dot"></span><span class="id">SRC-04</span><span class="title">Tasks &amp; status</span><span class="meta">Operations · prompt</span><span class="state">Not started</span><span class="meta">Not indexed</span></button>
+      <button class="row"><span class="dot"></span><span class="id">SRC-05</span><span class="title">Marketing assets</span><span class="meta">Marketing · prompt</span><span class="state">Not started</span><span class="meta">Not indexed</span></button>
+      <button class="row"><span class="dot deny"></span><span class="id">SRC-14</span><span class="title">HR &amp; people records</span><span class="meta">HR · prompt</span><span class="state">Metadata only</span><span class="meta">Upload denied</span></button>
+      <button class="row"><span class="dot deny"></span><span class="id">SRC-08</span><span class="title">Invoices &amp; financials</span><span class="meta">Finance · prompt</span><span class="state">Metadata only</span><span class="meta">Upload denied</span></button>
+      <button class="row"><span class="dot deny"></span><span class="id">SRC-05c</span><span class="title">Contracts &amp; NDAs</span><span class="meta">Legal · prompt</span><span class="state">Metadata only</span><span class="meta">Upload denied</span></button>
+      <button class="row"><span class="dot deny"></span><span class="id">SRC-07</span><span class="title">Emails</span><span class="meta">Each department</span><span class="state">Metadata only</span><span class="meta">Upload denied</span></button>
+      <button class="row"><span class="dot deny"></span><span class="id">SRC-12</span><span class="title">Meeting notes &amp; minutes</span><span class="meta">Operations · prompt</span><span class="state">Metadata only</span><span class="meta">Upload denied</span></button>
+      <button class="row"><span class="dot deny"></span><span class="id">SRC-10</span><span class="title">Project &amp; delivery files</span><span class="meta">Delivery · prompt</span><span class="state">Metadata only</span><span class="meta">Upload denied</span></button>
+      <div class="split">Interface specimens · not stored records</div>
+      <button class="row" lang="ar" dir="auto"><span class="dot pending"></span><span class="id">EX-02</span><span class="title">سياسات الإجازات</span><span class="meta">Specimen</span><span class="state">Located</span><span class="meta">Ingestion pending</span></button>
+      <button class="row"><span class="dot run"></span><span class="id">EX-06</span><span class="title">Embedding job · no provider</span><span class="meta">Specimen</span><span class="state">Processing</span><span class="meta">Route unapproved</span></button>
+      <button class="row"><span class="dot ready"></span><span class="id">EX-07</span><span class="title">Curated page · sample</span><span class="meta">Specimen</span><span class="state">Ready</span><span class="meta">Eval not run</span></button>
+      <button class="row"><span class="dot fail"></span><span class="id">EX-08</span><span class="title">Private repository test</span><span class="meta">Specimen</span><span class="state">Failed</span><span class="meta">Token absent</span></button>
+      <div class="list-foot">0 files received · 5 categories can be uploaded after an approval reference · 13 stay metadata-only in this pilot</div>
+    </main>
+    <aside class="rail" aria-label="Source attributes">
+      <h1>Company profile &amp; services</h1>
+      <p class="sub">Catalogue row. No file has been received.</p>
+      <dl>
+        <dt>Catalogue</dt><dd>profile</dd>
+        <dt>Suggested role</dt><dd>Marketing · not assigned</dd>
+        <dt>Named owner</dt><dd>Unassigned</dd>
+        <dt>Classification</dt><dd>Public</dd>
+        <dt>Intake</dt><dd>Not started</dd>
+        <dt>Ingestion</dt><dd>Not connected</dd>
+        <dt>Audience</dt><dd>Not set</dd>
+        <dt>Freshness</dt><dd>Unknown</dd>
+        <dt>Permission</dt><dd>Upload allowed only after an approval reference</dd>
+        <dt>Intended use</dt><dd>Retrieval. Fine-tune is not started.</dd>
+        <dt>Locator</dt><dd>Not recorded</dd>
+        <dt>Version</dt><dd>None</dd>
+        <dt>GitHub</dt><dd>Disconnected</dd>
+        <dt>Partners</dt><dd>Sales, Legal, Client Success</dd>
+      </dl>
+      <footer>Checklist ticks do not approve data, access or indexing. Retrieval evaluation is separate from any later fine-tune.</footer>
+    </aside>
+  </div>
+</div>
+</body>
+</html>
