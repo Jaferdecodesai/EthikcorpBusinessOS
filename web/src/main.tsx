@@ -21,9 +21,9 @@ function RootApp() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener("hashchange", update); return () => window.removeEventListener("hashchange", update); }, []);
   useEffect(() => {
-    document.title = "Ethikcorp BusinessLLM";
+    document.title = "Ethikcorp BusinessOS";
   }, [hash]);
-  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Ethikcorp BusinessLLM</h1><p>{sessionError || "Opening your workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
+  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Ethikcorp BusinessOS</h1><p>{sessionError || "Opening your workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
   return <BusinessApp />;
 }
 createRoot(document.getElementById("root")!).render(<React.StrictMode><RootApp /></React.StrictMode>);

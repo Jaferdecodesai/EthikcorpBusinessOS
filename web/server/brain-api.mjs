@@ -37,7 +37,7 @@ export async function handleBrain(brain, { method, pathname, body, role, session
   }
   if (method === "POST" && pathname === "/api/brain/ask") {
     const access = portalAccess(role, current);
-    if (!access.tabs.find((tab) => tab.id === "brain")?.enabled) return { brain: current, status: 403, data: { error: "Businessbrain is still building." } };
+    if (!access.tabs.find((tab) => tab.id === "brain")?.enabled) return { brain: current, status: 403, data: { error: "Ethikcorp BusinessBrain is still building." } };
     return { brain: current, status: 200, data: answerFromChunks(body.question || "", current.chunks || []) };
   }
   if (method === "POST" && pathname === "/api/brain/confirm") {

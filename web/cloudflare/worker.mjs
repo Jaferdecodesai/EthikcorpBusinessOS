@@ -30,7 +30,7 @@ export default {
       if(["/pm","/departments"].includes(url.pathname))return secured(Response.redirect(`${url.origin}/#${url.pathname.slice(1)}`,302));
       if(!url.pathname.startsWith("/api/"))return secured(await env.ASSETS.fetch(request));
       const invalid=checkApiRequest(request);if(invalid)return secured(json({error:invalid.error},invalid.status));
-      if(url.pathname==="/api/health")return secured(json({ok:true,product:"Ethikcorp BusinessLLM",mode:"cloud-preview",hosting:"cloudflare",storage:"sqlite-durable-object",isolation:"signed-browser-session",githubTokenConfigured:Boolean(env.GITHUB_TOKEN),driveConfigured:Boolean(env.GOOGLE_OAUTH_CLIENT_ID&&env.GOOGLE_OAUTH_CLIENT_SECRET),liveRuntimes:false,llm:"not_configured",region:"cloudflare-global-not-uae",build:env.BUILD_ID||""}));
+      if(url.pathname==="/api/health")return secured(json({ok:true,product:"Ethikcorp BusinessOS",mode:"cloud-preview",hosting:"cloudflare",storage:"sqlite-durable-object",isolation:"signed-browser-session",githubTokenConfigured:Boolean(env.GITHUB_TOKEN),driveConfigured:Boolean(env.GOOGLE_OAUTH_CLIENT_ID&&env.GOOGLE_OAUTH_CLIENT_SECRET),liveRuntimes:false,llm:"not_configured",region:"cloudflare-global-not-uae",build:env.BUILD_ID||""}));
       const secret=sessionSecret(request,env);
       let session=await readSession(request,secret);
       if(url.pathname==="/api/session"&&request.method==="GET") {

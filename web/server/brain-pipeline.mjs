@@ -119,8 +119,8 @@ export function portalAccess(role, brain) {
   const botsReady = departments.every((department) => department.confirmed);
   const dev = role === "dev";
   const tabs = [
-    { id: "pm", label: "Brainbuilder PM", enabled: true },
-    { id: "brain", label: "Ethikcorp Businessbrain", enabled: dev || report.brainReady },
+    { id: "pm", label: "BusinessBrain Builder", enabled: true },
+    { id: "brain", label: "Ethikcorp BusinessBrain", enabled: dev || report.brainReady },
     { id: "bots", label: "Ethikcorp Businessbots", enabled: dev || botsReady }
   ];
   const order = !dev && report.brainReady && botsReady ? ["brain", "bots", "pm"] : ["pm", "brain", "bots"];

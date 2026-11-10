@@ -50,14 +50,14 @@ export function BusinessApp() {
   const current = state?.tabs.find((item) => item.id === tab);
   const allowed = !current || current.enabled;
   return <div className="portal">
-    <aside className="side" aria-label="Ethikcorp BusinessLLM">
-      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessLLM</b><small>Built by Aqionlabs.ai</small></span></a>
-      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "Brainbuilder PM", enabled: true }, { id: "brain", label: "Ethikcorp Businessbrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
+    <aside className="side" aria-label="Ethikcorp BusinessOS">
+      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
+      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
       <div className="sidefoot">{state?.role === "dev" ? "Development team. All three areas are open." : "Customer view. Locked areas open from live build progress."}</div>
     </aside>
     <div className="maincol">
       <header className="topbar">
-        <div className="ctx"><span>Ethikcorp BusinessLLM</span><span aria-hidden="true">/</span><b>{tab === "brain" ? "Businessbrain" : tab === "bots" ? "Businessbots" : "Brainbuilder PM"}</b></div>
+        <div className="ctx"><span>Ethikcorp BusinessOS</span><span aria-hidden="true">/</span><b>{tab === "brain" ? "BusinessBrain" : tab === "bots" ? "Businessbots" : "BusinessBrain Builder"}</b></div>
         <div className="pills"><span className="pill a"><i />Prototype · not UAE-hosted</span><span className="pill r"><i />No base model connected</span></div>
       </header>
       <div className="page live-pad">
@@ -72,7 +72,7 @@ export function BusinessApp() {
 }
 
 function Locked({ percent, what }: { percent: number; what: string }) {
-  return <section className="card pad"><div className="eyebrow">Still building</div><h1>{what === "bots" ? "Businessbots is waiting for department confirmation" : "Businessbrain is being built"}</h1><p className="v" style={{ font: "600 42px/1 var(--f)", color: "var(--ink)" }}>{percent}%</p><div className="meter" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div><p className="note">This percentage counts finished pipeline stages. It is not a forecast.</p></section>;
+  return <section className="card pad"><div className="eyebrow">Still building</div><h1>{what === "bots" ? "Businessbots is waiting for department confirmation" : "BusinessBrain is being built"}</h1><p className="v" style={{ font: "600 42px/1 var(--f)", color: "var(--ink)" }}>{percent}%</p><div className="meter" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div><p className="note">This percentage counts finished pipeline stages. It is not a forecast.</p></section>;
 }
 
 function Project({ state, reload }: { state: Access; reload: () => Promise<void> }) {
@@ -85,7 +85,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
     setNotice("Speaking with this browser’s voice. No external speech service is used.");
   }
   return <>
-    <div className="vh"><div><div className="eyebrow">Brainbuilder PM</div><h1>Build the company brain</h1><p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p></div><button type="button" className="btn" onClick={speak}>Speak status</button></div>
+    <div className="vh"><div><div className="eyebrow">BusinessBrain Builder</div><h1>Build the company brain</h1><p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p></div><button type="button" className="btn" onClick={speak}>Speak status</button></div>
     {notice && <p className="note" role="status">{notice}</p>}
     <Outline state={state} />
     <Ownership reload={reload} />
@@ -156,7 +156,7 @@ function DevTools({ state, reload }: { state: Access; reload: () => Promise<void
 
 function Brain({ state }: { state: Access }) {
   return <>
-    <div className="vh"><div><div className="eyebrow">Ethikcorp Businessbrain</div><h1>Ask from indexed documents</h1><p className="sub">{dash.label}</p></div></div>
+    <div className="vh"><div><div className="eyebrow">Ethikcorp BusinessBrain</div><h1>Ask from indexed documents</h1><p className="sub">{dash.label}</p></div></div>
     <div className="grid g4"><article className="card kpi pad"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article><article className="card kpi pad"><div className="l">Passages</div><div className="v">{state.chunks}</div></article><article className="card kpi pad"><div className="l">Demo tasks</div><div className="v">{dash.company.tasksDone}/{dash.company.tasksOpen}</div><div className="x">Sample snapshot</div></article><article className="card kpi pad"><div className="l">Model</div><div className="v" style={{ fontSize: 18 }}>Not connected</div></article></div>
     <section className="card pad" style={{ marginTop: 16 }}><BarList caption="Sample net hours per week from the setup model. Not measured." rows={dash.hourBars.map((row) => ({ ...row, note: "estimate" }))} /></section>
     <ChatDock />
@@ -180,7 +180,7 @@ function Bots({ hash, state, reload }: { hash: string; state: Access; reload: ()
 function ChatDock() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [lines, setLines] = useState<{ who: string; text: string; cite?: string }[]>([{ who: "Businessbrain", text: "Ask about a document you indexed. I cite the passage or I say there is no match.", cite: "Prototype retrieval · no base model" }]);
+  const [lines, setLines] = useState<{ who: string; text: string; cite?: string }[]>([{ who: "BusinessBrain", text: "Ask about a document you indexed. I cite the passage or I say there is no match.", cite: "Prototype retrieval · no base model" }]);
   async function ask(event: React.FormEvent) {
     event.preventDefault();
     const question = text.trim();
@@ -190,11 +190,11 @@ function ChatDock() {
     setLines((prev) => [...prev, { who: "You", text: question }]);
     try {
       const result = await api("/api/brain/ask", { question });
-      setLines((prev) => [...prev, { who: "Businessbrain", text: result.answer, cite: result.citations?.[0] ? `${result.citations[0].document}: ${result.citations[0].excerpt}` : result.note }]);
-    } catch (reason) { setLines((prev) => [...prev, { who: "Businessbrain", text: (reason as Error).message }]); }
+      setLines((prev) => [...prev, { who: "BusinessBrain", text: result.answer, cite: result.citations?.[0] ? `${result.citations[0].document}: ${result.citations[0].excerpt}` : result.note }]);
+    } catch (reason) { setLines((prev) => [...prev, { who: "BusinessBrain", text: (reason as Error).message }]); }
   }
-  return <section className="chatdock" aria-label="Businessbrain chat">
+  return <section className="chatdock" aria-label="BusinessBrain chat">
     {open && <div className="log">{lines.map((line, index) => <div className="chatline" key={index}><b>{line.who}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div>}
-    <form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask Businessbrain" /><button className="btn" type="submit">Ask</button></form>
+    <form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask BusinessBrain" /><button className="btn" type="submit">Ask</button></form>
   </section>;
 }
