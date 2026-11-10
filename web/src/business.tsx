@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import catalog from "../shared/departments.json";
 import { SOURCES } from "../phase1/customer-logic.mjs";
 import { ceoDashboard } from "../server/ceo-dashboard.mjs";
-import { BarList } from "./charts";
+import { BarList, LiveChart } from "./charts";
 
 type Access = {
   role: "customer" | "dev";
@@ -17,6 +17,14 @@ type Access = {
   connectors: { github: { ok: boolean; missing?: string[] }; drive: { ok: boolean; missing?: string[] } };
   residency: { prototype: string; embedding: string; llm: string; production: string };
   finetune: { status: string; detail: string };
+  demo?: { github: string; driveUrl: string; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
+  datasets?: { id: string; rows: number }[];
+  opportunities?: { id: string; title: string; impactAed: number; formula: string; confidence: string; owner: string }[];
+  pins?: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[] }[] }[];
+  tasks?: { id: string; title: string; department: string; impactAed: number }[];
+  automations?: { id: string; departmentId: string; name: string; enabled: boolean; impactAed?: number | null; runs: { at: string; note: string }[] }[];
+  workflowMaps?: Record<string, { flows: { title: string; weeklyHours: number; steps: string[] }[]; friction: string[]; proposals: { id: string; name: string; trigger: string; steps: string[]; schedule: string; hoursSavedPerMonth: number; formula: string; impactAed: number | null; aedFormula: string; revenueAngle: string; assumption: string }[] }>;
+  llm?: { provider: string; model: string | null; region: string; embedding: string; azure: { missing: string[] } };
 };
 
 const dash = ceoDashboard();
@@ -154,7 +162,7 @@ export function BusinessApp() {
         {error && <div className="banner-need" role="alert">{error}</div>}
         {!allowed && <Locked percent={state?.percent || 0} what={tab} departments={state?.departments || []} />}
         {allowed && tab === "pm" && state && <Project state={state} reload={reload} />}
-        {allowed && tab === "brain" && state && <Brain state={state} />}
+        {allowed && tab === "brain" && state && <Brain state={state} reload={reload} />}
         {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
       </div>
     </div>
@@ -214,6 +222,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
     </section>
     {notice && <p className="note" role="status">{notice}</p>}
     <Outline state={state} />
+    <DemoSources state={state} reload={reload} />
     <Ownership reload={reload} />
     <Handoff reload={reload} />
     <section className="card band-card lift"><div className="card-band coral">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p></div></section>
@@ -233,6 +242,40 @@ function Outline({ state }: { state: Access }) {
       </article>;
     })}</div>
   </section>;
+}
+
+function DemoSources({ state, reload }: { state: Access; reload: () => Promise<void> }) {
+  const [github, setGithub] = useState(state.demo?.github || "https://github.com/Jaferdecodesai/ethikcorp-businessos-demo-data");
+  const [drive, setDrive] = useState(state.demo?.driveUrl || "https://drive.google.com/drive/folders/1sjU5DFEFRSwi1WcJFDz9tPRFwPHouut4");
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  async function ingest() {
+    setError("");
+    try {
+      const plan = await api("/api/brain/demo/plan", { github, drive });
+      setBusy(`0 of ${plan.files.length}`);
+      for (let index = 0; index < plan.files.length; index += 1) {
+        await api("/api/brain/demo/file", { path: plan.files[index].path });
+        setBusy(`${index + 1} of ${plan.files.length}: ${plan.files[index].path}`);
+        if (index % 4 === 3) await reload();
+      }
+      await reload();
+      setBusy("Indexed.");
+    } catch (reason) { setError((reason as Error).message); }
+  }
+  const done = state.demo?.filesDone || 0;
+  const total = state.demo?.filesTotal || 0;
+  return <section className="card band-card lift"><div className="card-band sky">Connected sources</div><div className="pad stack">
+    <p className="note">These two links are Ethikcorp’s demo sources. GitHub is public. Drive is fetched first and, if Google asks for a sign-in, the preview says so and continues from GitHub.</p>
+    <label>GitHub<input aria-label="GitHub demo repository" value={github} onChange={(event) => setGithub(event.target.value)} /></label>
+    <label>Google Drive<input aria-label="Google Drive demo folder" value={drive} onChange={(event) => setDrive(event.target.value)} /></label>
+    <p>{state.demo?.drive?.detail || "Drive has not been checked yet."}</p>
+    <button className="btn" type="button" onClick={ingest} disabled={Boolean(busy && busy !== "Indexed.")}>Ingest demo sources</button>
+    {busy && <p role="status">{busy}</p>}
+    {error && <p role="alert">{error}</p>}
+    <p className="note">1. Sources linked. 2. Files indexed {done}{total ? ` of ${total}` : ""}.</p>
+    <div className="meter" role="progressbar" aria-valuenow={total ? Math.round((done / total) * 100) : 0} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div>
+  </div></section>;
 }
 
 function Ownership({ reload }: { reload: () => Promise<void> }) {
@@ -287,17 +330,21 @@ function DevTools({ state, reload }: { state: Access; reload: () => Promise<void
     </div></section>;
 }
 
-function Brain({ state }: { state: Access }) {
-  const hourRows = dash.hourBars.map((row, index) => ({ ...row, note: "estimate", color: BAR_CYCLE[index % BAR_CYCLE.length], ink: "#03050A" }));
+function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }) {
+  const [insight, setInsight] = useState<{ chart?: Access["pins"] extends (infer T)[] | undefined ? T : never; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[] } | null>(null);
+  const hourRows = dash.hourBars.map((row, index) => ({ ...row, note: "estimate", color: BAR_CYCLE[index % BAR_CYCLE.length] }));
   return <>
     <header className="greet">
       <div>
         <div className="eyebrow">Ethikcorp BusinessBrain</div>
         <h1>The company, in one view.</h1>
-        <p className="sub">Ask from indexed documents. {dash.label}</p>
+        <p className="sub">Ask from indexed documents. {state.llm?.region || "Cloudflare Workers AI – not UAE-resident; UAE North option ready"} {state.llm?.provider === "workers-ai" ? state.llm.model : "Base model: not connected on this preview."}</p>
       </div>
-      <div className="greet-stat"><b>{dash.company.netHoursPerWeek}</b><span>Sample net hours / week. Not measured.</span></div>
+      <div className="greet-stat"><span className="sample-badge">SAMPLE DATA</span><b>{dash.company.netHoursPerWeek}</b><span>Sample net hours / week. Not measured.</span></div>
     </header>
+    <OpportunityList items={state.opportunities || []} reload={reload} title="Top revenue opportunities" />
+    {(state.pins || []).length > 0 && <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>Pinned insights</h2></div><div className="grid g2">{state.pins?.map((chart) => <LiveChart key={chart.id} spec={chart} />)}</div></section>}
+    {insight?.chart && <section className="card pad insight"><div className="ch"><h2>Live insight</h2><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/pin", { chart: insight.chart }); await reload(); }}>Pin to dashboard</button></div><LiveChart spec={insight.chart} />{insight.steps && <ol className="steps">{insight.steps.map((step, index) => <li key={index}><b>{step.tool}</b> {step.detail}</li>)}</ol>}</section>}
     <div className="bento">
       <article className="tile sky lift"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article>
       <article className="tile lime lift"><div className="l">Passages</div><div className="v">{state.chunks}</div></article>
@@ -313,8 +360,14 @@ function Brain({ state }: { state: Access }) {
       <article className="tile coral lift"><div className="l">Demo hours saved</div><div className="v">{dash.company.hoursSavedDemo}</div><div className="x">Not measured.</div></article>
       <article className="tile sky lift"><div className="l">Runs / week</div><div className="v">{dash.company.runsPerWeek}</div><div className="x">Sample model.</div></article>
     </div>
-    <ChatDock />
+    <ChatDock area="brain" onResult={(result) => setInsight(result)} />
+    {insight?.fixes && <OpportunityList items={insight.fixes} reload={reload} title="Revenue fixes" />}
   </>;
+}
+
+function OpportunityList({ items, reload, title }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void>; title: string }) {
+  if (!items.length) return null;
+  return <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>{title}</h2><span className="sample-badge">SAMPLE DATA</span></div><div className="fixes">{items.slice(0, 4).map((item) => <article className="fix" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : `AED ${item.impactAed.toLocaleString("en-AE")}`}</div><p>{item.formula}</p><p className="note">{item.confidence} · {item.owner}</p><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</div></section>;
 }
 
 function Bots({ hash, state, reload }: { hash: string; state: Access; reload: () => Promise<void> }) {
@@ -333,15 +386,28 @@ function Bots({ hash, state, reload }: { hash: string; state: Access; reload: ()
   const face = faceFor(department.id);
   return <>
     <header className="dept-hero" style={{ background: face.bg, color: face.fg }}><div><div className="dept-kicker">{department.code}</div><h1>{department.name}</h1><p className="sub" style={{ color: "inherit" }}>{department.mandate}</p></div><a className="btn ghost" href="#bots">All departments</a></header>
+    <BotDesk departmentId={department.id} state={state} reload={reload} />
     <section className="card pad"><div className="ch"><h2>Workflows</h2><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "state-chip done" : "state-chip attn"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed by the development team" : "Not confirmed"}</span></div>
       {department.workflows.map((workflow) => <div className="plainrow" key={workflow.id}><span /><span><b>{workflow.name}</b><small>{workflow.description}</small></span><span className="note">Template · not running</span></div>)}
     </section>
     {state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>Confirm this department</button>}
-    <ChatDock />
+    <ChatDock area="bots" departmentId={department.id} />
   </>;
 }
 
-function ChatDock() {
+function BotDesk({ departmentId, state, reload }: { departmentId: string; state: Access; reload: () => Promise<void> }) {
+  const map = state.workflowMaps?.[departmentId];
+  const saved = (state.automations || []).filter((item) => item.departmentId === departmentId);
+  const partners = state.departments.filter((item) => item.id !== departmentId);
+  return <>
+    {map?.flows?.[0] && <section className="card pad"><div className="ch"><h2>Workflow map</h2>{map && <span className="sample-badge">SAMPLE DATA</span>}</div><div className="flow">{map.flows[0].steps.map((step, index) => <span key={step}>{step}<small>{map.flows[0].weeklyHours ? ` · ${Math.round(map.flows[0].weeklyHours / Math.max(1, map.flows[0].steps.length) * 10) / 10} h/week` : ""}</small></span>)}</div>{map.friction?.length > 0 && <div className="ch"><h2>Bottlenecks</h2></div>}{map.friction?.map((item) => <p key={item}>{item}</p>)}</section>}
+    {map?.proposals?.length ? <section className="card pad"><div className="ch"><h2>Proposed automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{map.proposals.map((item) => <article className="fix" key={item.id}><h3>{item.name}</h3><p>{item.trigger}</p><p className="note">{item.formula}. {item.assumption}. {item.hoursSavedPerMonth} hours / month. {item.impactAed == null ? item.aedFormula : `AED ${item.impactAed.toLocaleString("en-AE")}. ${item.aedFormula}`}</p><p>{item.revenueAngle}</p>{state.role === "dev" && <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation", item); await reload(); }}>Build automation</button>}</article>)}</section> : <p className="note">Ingest the demo sources to load this department’s workflow file.</p>}
+    {saved.length > 0 && <section className="card pad"><div className="ch"><h2>Automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{saved.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.impactAed ? `AED ${item.impactAed.toLocaleString("en-AE")}. ` : ""}{item.runs.map((run) => run.note).join(" ") || "No runs yet."}</small></span><span><button type="button" className="btn sm ghost" onClick={async () => { await api("/api/brain/automation/toggle", { id: item.id }); await reload(); }}>{item.enabled ? "On" : "Off"}</button> <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation/run", { id: item.id }); await reload(); }}>Simulated run</button></span></div>)}</section>}
+    <section className="card pad"><div className="ch"><h2>Partner departments</h2></div>{partners.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.confirmed ? "Confirmed" : "Not confirmed"}</small></span><span className={item.confirmed ? "state-chip done" : "state-chip wait"}>{item.confirmed ? "Live" : "Waiting"}</span></div>)}</section>
+  </>;
+}
+
+function ChatDock({ area = "brain", departmentId, onResult }: { area?: string; departmentId?: string; onResult?: (result: { chart?: NonNullable<Access["pins"]>[number]; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[]; answer?: string }) => void }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [lines, setLines] = useState<{ who: string; text: string; cite?: string }[]>([{ who: "BusinessBrain", text: "Ask about a document you indexed. I cite the passage or I say there is no match.", cite: "Prototype retrieval · no base model" }]);
@@ -353,12 +419,14 @@ function ChatDock() {
     setOpen(true);
     setLines((prev) => [...prev, { who: "You", text: question }]);
     try {
-      const result = await api("/api/brain/ask", { question });
-      setLines((prev) => [...prev, { who: "BusinessBrain", text: result.answer, cite: result.citations?.[0] ? `${result.citations[0].document}: ${result.citations[0].excerpt}` : result.note }]);
+      const result = await api("/api/brain/ask", { question, area, departmentId });
+      onResult?.(result);
+      const trace = result.steps?.map((step: { tool: string; detail: string }) => `${step.tool}: ${step.detail}`).join(" ");
+      setLines((prev) => [...prev, { who: "BusinessBrain", text: result.answer, cite: result.citations?.[0] ? `${result.citations[0].document}: ${result.citations[0].excerpt}` : trace }]);
     } catch (reason) { setLines((prev) => [...prev, { who: "BusinessBrain", text: (reason as Error).message }]); }
   }
-  return <section className="chatdock" aria-label="BusinessBrain chat">
-    {open && <div className="log">{lines.map((line, index) => <div className="chatline" key={index}><b>{line.who}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div>}
-    <form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask BusinessBrain" /><button className="btn" type="submit">Ask</button></form>
-  </section>;
+  return <>
+    {open && <section className="card pad" aria-label="BusinessBrain transcript"><div className="log">{lines.map((line, index) => <div className="chatline" key={index}><b>{line.who}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div></section>}
+    <section className="chatdock" aria-label="BusinessBrain chat"><form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask BusinessBrain" /><button className="btn" type="submit">Ask</button></form></section>
+  </>;
 }

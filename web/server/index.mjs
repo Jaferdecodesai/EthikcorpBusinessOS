@@ -66,7 +66,7 @@ async function handleApi(req, res) {
       body.trustedRole = invite.role;
     }
     const role = brainState?.roles?.[localSession] || "customer";
-    const result = await handleBrain(brainState, { method: req.method, pathname: url.pathname, body, role, sessionId: localSession, connectors: { github: Boolean(process.env.GITHUB_TOKEN), drive: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) } });
+    const result = await handleBrain(brainState, { method: req.method, pathname: url.pathname, body, role, sessionId: localSession, env: process.env, connectors: { github: Boolean(process.env.GITHUB_TOKEN), drive: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) } });
     brainState = result.brain;
     if (result.signRole) {
       const token = await signInvite(localSecret, result.signRole);

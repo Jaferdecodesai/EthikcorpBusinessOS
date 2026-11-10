@@ -30,7 +30,7 @@ export default {
       if(["/pm","/departments"].includes(url.pathname))return secured(Response.redirect(`${url.origin}/#${url.pathname.slice(1)}`,302));
       if(!url.pathname.startsWith("/api/"))return secured(await env.ASSETS.fetch(request));
       const invalid=checkApiRequest(request);if(invalid)return secured(json({error:invalid.error},invalid.status));
-      if(url.pathname==="/api/health")return secured(json({ok:true,product:"Ethikcorp BusinessOS",mode:"cloud-preview",hosting:"cloudflare",storage:"sqlite-durable-object",isolation:"signed-browser-session",githubTokenConfigured:Boolean(env.GITHUB_TOKEN),driveConfigured:Boolean(env.GOOGLE_OAUTH_CLIENT_ID&&env.GOOGLE_OAUTH_CLIENT_SECRET),liveRuntimes:false,llm:"not_configured",region:"cloudflare-global-not-uae",build:env.BUILD_ID||""}));
+      if(url.pathname==="/api/health")return secured(json({ok:true,product:"Ethikcorp BusinessOS",mode:"cloud-preview",hosting:"cloudflare",storage:"sqlite-durable-object",isolation:"signed-browser-session",githubTokenConfigured:Boolean(env.GITHUB_TOKEN),driveConfigured:Boolean(env.GOOGLE_OAUTH_CLIENT_ID&&env.GOOGLE_OAUTH_CLIENT_SECRET),liveRuntimes:false,llm:env.AI?"@cf/meta/llama-3.3-70b-instruct-fp8-fast":"not_configured",embedding:env.AI?"@cf/baai/bge-base-en-v1.5":"prototype-hashing",region:"Cloudflare Workers AI – not UAE-resident; UAE North option ready",azure:["AZURE_OPENAI_ENDPOINT","AZURE_OPENAI_KEY","AZURE_OPENAI_DEPLOYMENT"].filter((name)=>!env[name]),build:env.BUILD_ID||""}));
       const secret=sessionSecret(request,env);
       let session=await readSession(request,secret);
       if(url.pathname==="/api/session"&&request.method==="GET") {
@@ -99,7 +99,7 @@ export class PreviewWorkspace extends DurableObject {
         const sessionId=request.headers.get("x-brain-session")||"";
         const stored=this.loadBrain();
         const role=stored?.roles?.[sessionId]||"customer";
-        const result=await handleBrain(stored,{method:request.method,pathname:url.pathname,body,role,sessionId,secret:"",connectors:{github:Boolean(this.env.GITHUB_TOKEN),drive:Boolean(this.env.GOOGLE_OAUTH_CLIENT_ID&&this.env.GOOGLE_OAUTH_CLIENT_SECRET)}});
+        const result=await handleBrain(stored,{method:request.method,pathname:url.pathname,body,role,sessionId,secret:"",env:this.env,connectors:{github:Boolean(this.env.GITHUB_TOKEN),drive:Boolean(this.env.GOOGLE_OAUTH_CLIENT_ID&&this.env.GOOGLE_OAUTH_CLIENT_SECRET)}});
         if(result.brain)this.saveBrain(result.brain);
         return json(result.data,result.status);
       }catch(error){return json({error:error.message||"Brain request failed."},400);}
