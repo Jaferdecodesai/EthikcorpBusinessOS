@@ -40,6 +40,7 @@ button, input, select, textarea { font: inherit; }
 .navlabel { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #7f7bc4; padding: 12px 10px 6px; }
 .side a.nav, .side button.nav { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 8px; color: #d6d4f5; font-weight: 500; margin: 2px 0; background: none; border: 0; text-align: left; text-decoration: none; position: relative; font-size: 13.5px; }
 .side a.nav:hover, .side button.nav:hover { background: rgba(255,255,255,.06); }
+.side button.nav:disabled { opacity: .4; cursor: not-allowed; }
 .side a.nav.on, .side button.nav.on { background: rgba(255,255,255,.1); color: #fff; }
 .side a.nav.on::before, .side button.nav.on::before { content: ""; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--leaf); }
 .side .count { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 600; background: rgba(255,255,255,.12); color: #fff; border-radius: 999px; padding: 0 7px; }

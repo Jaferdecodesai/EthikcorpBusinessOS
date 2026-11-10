@@ -3,6 +3,8 @@ import { createDepartmentStoreCore, handleDepartmentApi } from "../server/depart
 import { ceoDashboard, ceoDepartment } from "../server/ceo-dashboard.mjs";
 import { runtimeConfig } from "../server/runtimes.mjs";
 import { createSession, readSession, checkApiRequest } from "./session.mjs";
+import { handleBrain } from "../server/brain-api.mjs";
+import { readInvite, signInvite } from "../server/invites.mjs";
 
 const json = (value, status=200, extra={}) => new Response(JSON.stringify(value),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store",...extra}});
 const headers = {
@@ -28,7 +30,7 @@ export default {
       if(["/pm","/departments"].includes(url.pathname))return secured(Response.redirect(`${url.origin}/#${url.pathname.slice(1)}`,302));
       if(!url.pathname.startsWith("/api/"))return secured(await env.ASSETS.fetch(request));
       const invalid=checkApiRequest(request);if(invalid)return secured(json({error:invalid.error},invalid.status));
-      if(url.pathname==="/api/health")return secured(json({ok:true,mode:"cloud-preview",hosting:"cloudflare",storage:"sqlite-durable-object",isolation:"signed-browser-session",githubTokenConfigured:false,liveRuntimes:false,build:env.BUILD_ID||""}));
+      if(url.pathname==="/api/health")return secured(json({ok:true,product:"Ethikcorp BusinessLLM",mode:"cloud-preview",hosting:"cloudflare",storage:"sqlite-durable-object",isolation:"signed-browser-session",githubTokenConfigured:Boolean(env.GITHUB_TOKEN),driveConfigured:Boolean(env.GOOGLE_OAUTH_CLIENT_ID&&env.GOOGLE_OAUTH_CLIENT_SECRET),liveRuntimes:false,llm:"not_configured",region:"cloudflare-global-not-uae",build:env.BUILD_ID||""}));
       const secret=sessionSecret(request,env);
       let session=await readSession(request,secret);
       if(url.pathname==="/api/session"&&request.method==="GET") {
@@ -36,6 +38,25 @@ export default {
         return secured(json({ready:true,mode:"cloud-preview",expires:session.expires},200,fresh?{"Set-Cookie":session.cookie}:{}));
       }
       if(!session)return secured(json({error:"Open the app to establish your preview workspace, then retry."},401));
+      if(url.pathname.startsWith("/api/brain")){
+        const stub=env.PREVIEW_WORKSPACES.get(env.PREVIEW_WORKSPACES.idFromName("ethikcorp-businessllm-v1"));
+        if(url.pathname==="/api/brain/claim"){
+          const payload=await request.json().catch(()=>({}));
+          const invite=await readInvite(secret,payload.invite||"");
+          if(!invite)return secured(json({error:"That invite is not valid."},401));
+          return secured(await stub.fetch(new Request(request.url,{method:"POST",headers:{"content-type":"application/json","x-brain-session":session.id},body:JSON.stringify({trustedRole:invite.role})})));
+        }
+        const headers=new Headers(request.headers);
+        headers.set("x-brain-session",session.id);
+        const proxied=new Request(request,{headers});
+        const response=await stub.fetch(proxied);
+        if(url.pathname==="/api/brain/bootstrap-dev"&&response.status===200){
+          const data=await response.json();
+          if(data.claim){const token=await signInvite(secret,"dev");return secured(json({url:`${url.origin}/?invite=${token}#dev`}));}
+          return secured(json(data,response.status));
+        }
+        return secured(response);
+      }
       if(url.pathname.startsWith("/api/github/"))return secured(json({error:"GitHub is not connected in this cloud preview. Use the local private-repository connector or export the plan."},503));
       if(url.pathname==="/api/ceo/dashboard")return secured(json(ceoDashboard()));
       const dashboardDept=url.pathname.match(/^\/api\/ceo\/dashboard\/([a-z0-9-]+)$/);
@@ -52,6 +73,7 @@ export class PreviewWorkspace extends DurableObject {
     super(ctx,env);this.sql=ctx.storage.sql;this.queue=Promise.resolve();this.rate={at:Date.now(),count:0};
     this.ready=ctx.blockConcurrencyWhile(async()=>{
       this.sql.exec("CREATE TABLE IF NOT EXISTS workspace_state (id INTEGER PRIMARY KEY CHECK(id = 1), body TEXT NOT NULL)");
+      this.sql.exec("CREATE TABLE IF NOT EXISTS brain_state (id INTEGER PRIMARY KEY CHECK(id = 1), body TEXT NOT NULL)");
       const saved=[...this.sql.exec("SELECT body FROM workspace_state WHERE id = 1")][0];
       this.store=createDepartmentStoreCore(saved?JSON.parse(saved.body):null,state=>{
         const body=JSON.stringify(state);
@@ -65,9 +87,23 @@ export class PreviewWorkspace extends DurableObject {
     const execute=()=>this.handle(request);
     const response=this.queue.then(execute,execute);this.queue=response.then(()=>{},()=>{});return response;
   }
+  loadBrain(){const row=[...this.sql.exec("SELECT body FROM brain_state WHERE id = 1")][0];return row?JSON.parse(row.body):null;}
+  saveBrain(brain){const body=JSON.stringify(brain);if(new TextEncoder().encode(body).byteLength>1500000)throw new Error("Brain storage limit reached.");this.sql.exec("INSERT INTO brain_state (id,body) VALUES (1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body",body);}
   async handle(request) {
     if(Date.now()-this.rate.at>60000)this.rate={at:Date.now(),count:0};
     if(++this.rate.count>120)return json({error:"Please wait a minute before making more workspace requests."},429,{"Retry-After":"60"});
+    const url=new URL(request.url);
+    if(url.pathname.startsWith("/api/brain")){
+      try{
+        const body=request.method==="GET"?{}:await request.json();
+        const sessionId=request.headers.get("x-brain-session")||"";
+        const stored=this.loadBrain();
+        const role=stored?.roles?.[sessionId]||"customer";
+        const result=await handleBrain(stored,{method:request.method,pathname:url.pathname,body,role,sessionId,secret:"",connectors:{github:Boolean(this.env.GITHUB_TOKEN),drive:Boolean(this.env.GOOGLE_OAUTH_CLIENT_ID&&this.env.GOOGLE_OAUTH_CLIENT_SECRET)}});
+        if(result.brain)this.saveBrain(result.brain);
+        return json(result.data,result.status);
+      }catch(error){return json({error:error.message||"Brain request failed."},400);}
+    }
     try {
       let result;
       await handleDepartmentApi({url:request.url,method:request.method},null,{

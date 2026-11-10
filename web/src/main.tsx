@@ -11,8 +11,7 @@ import "@fontsource/fira-sans/latin-700.css";
 import "@fontsource/fira-code/latin-500.css";
 import "./style.css";
 import { cloudPreview, ensureCloudSession } from "./hosting";
-import { parseHash } from "../shared/build-steps.mjs";
-import { ProductApp } from "./product";
+import { BusinessApp } from "./business";
 import "./portal.css";
 
 function RootApp() {
@@ -22,11 +21,9 @@ function RootApp() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener("hashchange", update); return () => window.removeEventListener("hashchange", update); }, []);
   useEffect(() => {
-    const route = parseHash(hash);
-    const title = route.tab === "pm" ? "Superbrain PM" : route.tab === "builder" ? "Superbrain Builder" : route.role === "admin" ? "AqionBrain admin" : route.role === "department" ? "Department" : route.tab === "bots" ? "Superbots" : "Superbrain CEO";
-    document.title = `${title} · Aqion Superbrain`;
+    document.title = "Ethikcorp BusinessLLM";
   }, [hash]);
-  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Aqion Superbrain</h1><p>{sessionError || "Opening your cloud workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
-  return <ProductApp hash={hash || "#pm"} />;
+  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Ethikcorp BusinessLLM</h1><p>{sessionError || "Opening your workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
+  return <BusinessApp />;
 }
 createRoot(document.getElementById("root")!).render(<React.StrictMode><RootApp /></React.StrictMode>);

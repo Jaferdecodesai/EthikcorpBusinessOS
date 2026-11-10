@@ -6,6 +6,8 @@ import { createServer as createViteServer } from "vite";
 import { Github, validateRepo, validateUpload, cleanPMState } from "./github.mjs";
 import { createDepartmentStore, handleDepartmentApi } from "./departments.mjs";
 import { ceoDashboard, ceoDepartment } from "./ceo-dashboard.mjs";
+import { handleBrain } from "./brain-api.mjs";
+import { readInvite, signInvite } from "./invites.mjs";
 import { runtimeConfig } from "./runtimes.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -18,6 +20,9 @@ if (fs.existsSync(envFile)) {
 }
 const port = Number(process.env.PORT || 5052);
 const github = new Github(process.env.GITHUB_TOKEN || "");
+const localSecret = process.env.SESSION_SECRET || "local-cloudflare-preview-only-secret-not-for-deployment";
+let brainState = null;
+const localSession = "local-preview-session";
 const departmentStore = createDepartmentStore(process.env.DEPARTMENT_STORE_PATH || path.join(root, ".data/departments.json"));
 const runtimes = runtimeConfig();
 const development = process.env.NODE_ENV !== "production";
@@ -51,6 +56,23 @@ async function handleApi(req, res) {
   if (req.method === "GET" && dashboardDept) {
     const report = ceoDepartment(dashboardDept[1]);
     return json(res, report ? 200 : 404, report || { error: "Unknown department." });
+  }
+  if (req.url?.startsWith("/api/brain")) {
+    const body = req.method === "GET" ? {} : await readJson(req);
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (url.pathname === "/api/brain/claim") {
+      const invite = await readInvite(localSecret, body.invite || "");
+      if (!invite) return json(res, 401, { error: "That invite is not valid." });
+      body.trustedRole = invite.role;
+    }
+    const role = brainState?.roles?.[localSession] || "customer";
+    const result = await handleBrain(brainState, { method: req.method, pathname: url.pathname, body, role, sessionId: localSession, connectors: { github: Boolean(process.env.GITHUB_TOKEN), drive: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) } });
+    brainState = result.brain;
+    if (result.signRole) {
+      const token = await signInvite(localSecret, result.signRole);
+      return json(res, 200, { url: `http://127.0.0.1:${port}/?invite=${token}#dev` });
+    }
+    return json(res, result.status, result.data);
   }
   if (req.url?.startsWith("/api/departments") || req.url === "/api/runtime/status") return handleDepartmentApi(req, res, { store: departmentStore, config: runtimes, readJson, json });
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed." });
