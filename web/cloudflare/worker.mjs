@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDepartmentStoreCore, handleDepartmentApi } from "../server/department-core.mjs";
+import { ceoDashboard, ceoDepartment } from "../server/ceo-dashboard.mjs";
 import { runtimeConfig } from "../server/runtimes.mjs";
 import { createSession, readSession, checkApiRequest } from "./session.mjs";
 
@@ -36,6 +37,9 @@ export default {
       }
       if(!session)return secured(json({error:"Open the app to establish your preview workspace, then retry."},401));
       if(url.pathname.startsWith("/api/github/"))return secured(json({error:"GitHub is not connected in this cloud preview. Use the local private-repository connector or export the plan."},503));
+      if(url.pathname==="/api/ceo/dashboard")return secured(json(ceoDashboard()));
+      const dashboardDept=url.pathname.match(/^\/api\/ceo\/dashboard\/([a-z0-9-]+)$/);
+      if(dashboardDept){const report=ceoDepartment(dashboardDept[1]);return secured(json(report||{error:"Unknown department."},report?200:404));}
       if(!(url.pathname.startsWith("/api/departments")||url.pathname==="/api/runtime/status"))return secured(json({error:"Unknown API endpoint."},404));
       const id=env.PREVIEW_WORKSPACES.idFromName(`v1:${session.id}`);
       return secured(await env.PREVIEW_WORKSPACES.get(id).fetch(request));

@@ -5,6 +5,7 @@ import {
 } from "../shared/build-steps.mjs";
 import { useDemo, type DemoState, type FileRow, type SourceRow, type StepRecord } from "./demo-state";
 import { cloudPreview } from "./hosting";
+import { BarList } from "./charts";
 
 const METRICS: Record<string, [string, string, string][]> = {
   sales: [["Open proposals", "12", "Sample pipeline"], ["Drafts awaiting a person", "4", "Not sent"], ["Win rate", "—", "Not calculated"]],
@@ -80,17 +81,24 @@ function Sidebar({ route, state }: { route: ReturnType<typeof parseHash>; state:
       <a className={route.tab === "bots" ? "nav on" : "nav"} href="#team/bots/sales">Superbots Department</a>
     </nav>;
   }
-  if (route.role === "ceo") {
-    return <nav aria-label="CEO">
-      <div className="navlabel">CEO</div>
-      <a className={route.tab === "brain" ? "nav on" : "nav"} href="#live/ceo">Brain and dashboards</a>
-      <a className={route.tab === "bots" ? "nav on" : "nav"} href="#live/ceo/bots">Superbots</a>
-    </nav>;
+  if (route.role === "ceo" || route.role === "admin" || route.role === "department") {
+    return <PhaseTwoNav route={route} />;
   }
   if (route.role === "department") {
     return <nav aria-label="Departments">{catalog.map((item) => <a key={item.id} className={route.dept === item.id ? "nav on" : "nav"} href={`#live/dept/${item.id}`}>{item.short}<span className="count">{item.code}</span></a>)}</nav>;
   }
   return <nav aria-label="Admin"><div className="navlabel">Aqion team</div><a className="nav on" href="#live/admin">Brain configuration</a></nav>;
+}
+
+function PhaseTwoNav({ route }: { route: ReturnType<typeof parseHash> }) {
+  const [open, setOpen] = useState(route.role === "department" || route.tab === "bots");
+  useEffect(() => { if (route.role === "department" || route.tab === "bots") setOpen(true); }, [route.role, route.tab]);
+  return <nav aria-label="Phase 2">
+    <div className="navlabel">{route.role === "admin" ? "Admin" : "CEO"}</div>
+    {route.role === "admin" ? <a className="nav on" href="#live/admin">Brain configuration</a> : <a className={route.tab === "brain" && route.role === "ceo" ? "nav on" : "nav"} href="#live/ceo">Superbrain</a>}
+    <button type="button" className={open ? "nav on" : "nav"} aria-expanded={open} onClick={() => setOpen((value) => !value)}>Superbots</button>
+    {open && <div className="botmenu">{catalog.map((item) => <a key={item.id} className={route.dept === item.id ? "nav on" : "nav"} href={`#live/dept/${item.id}`}>{item.short}<span className="count">{item.code}</span></a>)}</div>}
+  </nav>;
 }
 
 function Switcher({ route }: { route: ReturnType<typeof parseHash> }) {
@@ -230,25 +238,50 @@ function TeamBots({ deptId, state, setState }: { deptId: string; state: DemoStat
   </>;
 }
 
+type DashDept = { id: string; name: string; code: string; status: string; blocker: string; tasksDone: number; tasksOpen: number; blocked: number; hoursLogged: number; netHoursPerWeek: number; runsPerWeek: number; people: number; href: string };
+type Dashboard = { label: string; company: { employees: number; tasksDone: number; tasksOpen: number; blocked: number; hoursLogged: number; hoursSavedDemo: number; netHoursPerWeek: number; automations: number; runsPerWeek: number; clickupOpenTasks: number }; departments: DashDept[]; hourBars: { id: string; label: string; value: number; href: string }[]; taskBars: { id: string; label: string; name: string; done: number; open: number; blocked: number; href: string }[]; trend: { week: string; netHours: number; runs: number }[]; trendNote: string; pipeline: { label: string; value: number }[]; pipelineNote: string };
+
+function useDashboard() {
+  const [data, setData] = useState<Dashboard | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch("/api/ceo/dashboard", { credentials: "same-origin" }).then((response) => response.ok ? response.json() : Promise.reject(new Error("Dashboard API failed."))).then((body) => { if (live) setData(body); }).catch((reason) => { if (live) setError(reason.message); });
+    return () => { live = false; };
+  }, []);
+  return { data, error };
+}
+
 function CeoBrain({ state }: { state: DemoState }) {
-  return <>
-    <div className="vh"><div><div className="eyebrow">Phase 2 · {state.admin.brainName}</div><h1>The company, from the sample pack</h1><p className="sub">Ask the brain, then open a department. Answers stay inside the Harbour Learning sample.</p></div></div>
-    <div className="grid g2">
-      <BrainChat title={state.admin.brainName} abstain={state.admin.abstain} />
-      <div>
-        <div className="grid g2"><Kpi label="Open work" value="18" detail="Sample items across nine teams" /><Kpi label="Waiting on a person" value="4" detail="Drafts are not actions" /></div>
-        <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>Departments</h2><a href="#live/ceo/bots">Open Superbots</a></div>
-          {catalog.filter((item) => state.admin.departments[item.id]?.enabled !== false).map((item) => <a className="checkrow" key={item.id} href={`#live/ceo/bots/${item.id}`}><span className="count">{item.code}</span><span><b>{item.name}</b><small>{METRICS[item.id]?.[0]?.[0]} {METRICS[item.id]?.[0]?.[1]}</small></span><span className="note">View</span></a>)}
-        </section>
+  const { data, error } = useDashboard();
+  return <div className="live-pad">
+    <div className="vh"><div><div className="eyebrow">Phase 2 · Superbrain</div><h1>The company, as the sample stands</h1><p className="sub">{data?.label || "Loading the dashboard seed."} Open a department from a card or from Superbots.</p></div></div>
+    {error && <div className="banner-need" role="alert">{error}</div>}
+    {data && <>
+      <div className="grid g4">
+        <Kpi label="People" value={String(data.company.employees)} detail="Demo seed, 3 per department" />
+        <Kpi label="Tasks done / open" value={`${data.company.tasksDone} / ${data.company.tasksOpen}`} detail="Figure 5 demo snapshot" />
+        <Kpi label="Hours logged" value={`${data.company.hoursLogged} h`} detail="Demo snapshot, not a timesheet" />
+        <Kpi label="Net hours / week" value={String(data.company.netHoursPerWeek)} detail="Section 7 model, after review" />
       </div>
-    </div>
-  </>;
+      <div className="grid g2" style={{ marginTop: 16 }}>
+        <section className="card pad"><div className="ch"><h2>Tasks</h2><span className="note">{data.company.blocked} blocked in the sample</span></div><Donut done={data.company.tasksDone} open={data.company.tasksOpen} blocked={data.company.blocked} /></section>
+        <section className="card pad"><div className="ch"><h2>Hours freed</h2></div><Trend points={data.trend} note={data.trendNote} /><BarList caption="Net hours per department per week. Select a bar to open that portal." rows={data.hourBars.map((row) => ({ ...row, note: "Section 7 estimate" }))} /></section>
+      </div>
+      <div className="grid g2" style={{ marginTop: 16 }}>
+        <section className="card pad"><div className="ch"><h2>Work by department</h2></div><BarList caption="Open tasks in the demo snapshot." rows={data.taskBars.map((row) => ({ id: row.id, label: row.name, value: row.open, href: row.href, note: `${row.done} done, ${row.blocked} blocked` }))} /></section>
+        <section className="card pad"><div className="ch"><h2>Sales pipeline</h2><span className="note">{data.pipelineNote}</span></div><DonutSimple parts={data.pipeline} /></section>
+      </div>
+      <div className="grid g3" style={{ marginTop: 16 }}>{data.departments.filter((item) => state.admin.departments[item.id]?.enabled !== false).map((item) => <a className="card pad" key={item.id} href={item.href} style={{ textDecoration: "none" }}><div className="l">{item.code} · {item.runsPerWeek} runs/week</div><h2 style={{ fontSize: 18 }}>{item.name}</h2><p className="note">{item.status}. {item.blocker}</p><p><b style={{ color: "var(--ink)" }}>{item.netHoursPerWeek} h</b> <span className="note">net / week</span></p></a>)}</div>
+    </>}
+    <ChatDock title={state.admin.brainName} abstain={state.admin.abstain} />
+  </div>;
 }
 
 function CeoBots({ deptId, state, setState }: { deptId: string; state: DemoState; setState: (value: DemoState | ((prev: DemoState) => DemoState)) => void }) {
   if (!deptId) return <>
     <div className="vh"><div><div className="eyebrow">Phase 2 · Superbots</div><h1>Choose a department</h1><p className="sub">Each page is that team’s sample performance. You can add a workflow draft. It is not started.</p></div></div>
-    <DepartmentGrid state={state} hrefBase="#live/ceo/bots" />
+    <DepartmentGrid state={state} hrefBase="#live/dept" />
   </>;
   const department = catalog.find((item) => item.id === deptId) || catalog[0];
   const drafts = state.drafts.filter((draft) => draft.departmentId === department.id);
@@ -267,19 +300,20 @@ function DepartmentPortal({ deptId, state, setState }: { deptId: string; state: 
   const department = catalog.find((item) => item.id === deptId) || catalog[0];
   const settings = state.admin.departments[department.id] || { enabled: true, chat: true };
   const drafts = state.drafts.filter((draft) => draft.departmentId === department.id);
-  return <>
+  const dash = useDashboard();
+  const sample = dash.data?.departments.find((item) => item.id === department.id);
+  return <div className="live-pad">
     <div className="vh"><div><div className="eyebrow">Phase 2 · department team</div><h1>{department.name}</h1><p className="sub">{department.mandate}</p></div></div>
     {!settings.enabled && <div className="banner-need" role="status"><strong>Hidden in the preview. </strong>An admin turned this department off. The sample is still here.</div>}
-    <div className="grid g2">
-      {settings.chat ? <BrainChat title={`${department.short} brain`} abstain={state.admin.abstain} hint={`Ask about ${department.short}. Restricted records stay excluded.`} /> : <section className="card pad"><h2>Chat is off</h2><p>The admin preview has chat disabled for this department.</p></section>}
-      <div><MetricRow id={department.id} /></div>
-    </div>
+    {sample && <div className="grid g4"><Kpi label="Tasks done / open" value={`${sample.tasksDone} / ${sample.tasksOpen}`} detail="Demo snapshot" /><Kpi label="Blocked" value={String(sample.blocked)} detail="Sample, not a live queue" /><Kpi label="Runs / week" value={String(sample.runsPerWeek)} detail="Section 7 assumption" /><Kpi label="Net hours / week" value={String(sample.netHoursPerWeek)} detail="Estimate, after review" /></div>}
+    {sample && <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>Bot status</h2></div><p>{sample.status}</p><p className="note">{sample.blocker}</p></section>}
     <section className="card pad"><div className="ch"><h2>Workflows</h2></div>
       {department.workflows.map((workflow) => <div className="plainrow" key={workflow.id}><span /><span><b>{workflow.name}</b><small>{workflow.description}</small></span><span className="note">Template · not running</span></div>)}
       {drafts.map((draft) => <div className="plainrow" key={draft.id}><span /><span><b>{draft.name}</b><small>{draft.purpose}</small></span><span className="flag">Draft · this browser</span></div>)}
     </section>
     <WorkflowForm departmentId={department.id} onCreate={(draft) => setState((prev) => ({ ...prev, drafts: [draft, ...prev.drafts] }))} />
-  </>;
+    {settings.chat ? <ChatDock title={`${department.short} brain`} abstain={state.admin.abstain} hint={`Ask about ${department.short}. Restricted records stay excluded.`} /> : null}
+  </div>;
 }
 
 function AdminPortal({ state, setState }: { state: DemoState; setState: (value: DemoState | ((prev: DemoState) => DemoState)) => void }) {
@@ -287,15 +321,12 @@ function AdminPortal({ state, setState }: { state: DemoState; setState: (value: 
   function patchAdmin(partial: Partial<DemoState["admin"]>) {
     setState((prev) => ({ ...prev, admin: { ...prev.admin, ...partial } }));
   }
-  return <>
+  return <div className="live-pad">
     <div className="vh"><div><div className="eyebrow">Phase 2 · AqionBrain admin</div><h1>Same brain, with the settings</h1><p className="sub">This is the CEO brain plus the switches for the preview. Changes stay in this browser. They are not deployed.</p></div></div>
-    <div className="grid g2">
-      <BrainChat title={admin.brainName} abstain={admin.abstain} />
-      <section className="card pad"><div className="ch"><h2>CEO brain</h2></div><div className="stack">
+    <section className="card pad"><div className="ch"><h2>CEO brain</h2><a href="#live/ceo">Open the Superbrain dashboard</a></div><div className="stack">
         <label>Display name<input aria-label="Brain name" value={admin.brainName} onChange={(event) => patchAdmin({ brainName: event.target.value.slice(0, 80) })} /></label>
         <label><input type="checkbox" checked={admin.abstain} onChange={(event) => patchAdmin({ abstain: event.target.checked })} /> Say when the sample has no source</label>
       </div><p className="note">Turning this off does not invent an answer. This preview still refuses to guess.</p></section>
-    </div>
     <section className="card pad"><div className="ch"><h2>Department portals</h2></div>
       {catalog.map((item) => {
         const settings = admin.departments[item.id] || { enabled: true, chat: true };
@@ -305,7 +336,8 @@ function AdminPortal({ state, setState }: { state: DemoState; setState: (value: 
         return <div className="plainrow" key={item.id}><span className="count">{item.code}</span><span><b>{item.name}</b><small><a href={`#live/dept/${item.id}`}>Open the department portal</a></small></span><span style={{ display: "flex", gap: 12 }}><label><input type="checkbox" checked={settings.enabled} onChange={(event) => patchDept({ enabled: event.target.checked })} /> Shown</label><label><input type="checkbox" checked={settings.chat} onChange={(event) => patchDept({ chat: event.target.checked })} /> Chat</label></span></div>;
       })}
     </section>
-  </>;
+    <ChatDock title={admin.brainName} abstain={admin.abstain} />
+  </div>;
 }
 
 function DepartmentGrid({ state, hrefBase }: { state: DemoState; hrefBase: string }) {
@@ -335,7 +367,44 @@ function WorkflowForm({ departmentId, onCreate }: { departmentId: string; onCrea
   </div></section>;
 }
 
-function BrainChat({ title, abstain, hint }: { title: string; abstain: boolean; hint?: string }) {
+function Donut({ done, open, blocked }: { done: number; open: number; blocked: number }) {
+  const parts = [{ label: "Done", value: done, color: "#0033ff" }, { label: "Open", value: open, color: "#8a5a12" }, { label: "Blocked", value: blocked, color: "#9f2422" }];
+  return <DonutSimple parts={parts.map((part) => ({ label: part.label, value: part.value, color: part.color }))} />;
+}
+
+function DonutSimple({ parts }: { parts: { label: string; value: number; color?: string }[] }) {
+  const colors = ["#0033ff", "#8a5a12", "#9f2422", "#046b3c"];
+  const total = parts.reduce((sum, part) => sum + part.value, 0) || 1;
+  let cursor = 0;
+  const slices = parts.map((part, index) => {
+    const start = cursor / total;
+    cursor += part.value;
+    const end = cursor / total;
+    return { d: describeArc(36, 36, 28, start, Math.max(end, start + 0.001)), color: part.color || colors[index % colors.length] };
+  });
+  return <div className="donut-wrap"><svg width="120" height="120" viewBox="0 0 72 72" role="img" aria-label={parts.map((part) => `${part.label} ${part.value}`).join(", ")}>{slices.map((slice) => <path key={slice.d} d={slice.d} fill={slice.color} />)}<circle cx="36" cy="36" r="16" fill="#fff" /></svg><ul>{parts.map((part) => <li key={part.label}><b style={{ color: "var(--ink)" }}>{part.value}</b> {part.label}</li>)}</ul></div>;
+}
+
+function describeArc(cx: number, cy: number, radius: number, start: number, end: number) {
+  const sweep = Math.min(end - start, 0.999);
+  const a0 = (start * Math.PI * 2) - Math.PI / 2;
+  const a1 = ((start + sweep) * Math.PI * 2) - Math.PI / 2;
+  const large = sweep > 0.5 ? 1 : 0;
+  const x0 = cx + radius * Math.cos(a0);
+  const y0 = cy + radius * Math.sin(a0);
+  const x1 = cx + radius * Math.cos(a1);
+  const y1 = cy + radius * Math.sin(a1);
+  return `M ${cx} ${cy} L ${x0} ${y0} A ${radius} ${radius} 0 ${large} 1 ${x1} ${y1} Z`;
+}
+
+function Trend({ points, note }: { points: { week: string; netHours: number }[]; note: string }) {
+  const max = Math.max(...points.map((point) => point.netHours), 1);
+  const coords = points.map((point, index) => `${(index / Math.max(points.length - 1, 1)) * 280 + 16},${120 - (point.netHours / max) * 96}`).join(" ");
+  return <figure><svg className="trend" viewBox="0 0 312 148" role="img" aria-label={points.map((point) => `${point.week} ${point.netHours} hours`).join(", ")}><polyline fill="none" stroke="#0033ff" strokeWidth="3" points={coords} />{points.map((point, index) => <text key={point.week} x={(index / Math.max(points.length - 1, 1)) * 280 + 16} y="140" textAnchor="middle" fontSize="11" fill="#555a72">{point.week}</text>)}</svg><figcaption className="note">{note}</figcaption></figure>;
+}
+
+function ChatDock({ title, abstain, hint }: { title: string; abstain: boolean; hint?: string }) {
+  const [open, setOpen] = useState(false);
   const [lines, setLines] = useState<{ who: "you" | "brain"; text: string; cite?: string }[]>([{ who: "brain", text: hint || "Ask about services, policy, or the sample pipeline. Payroll stays excluded.", cite: "Sample · not a connected model" }]);
   const [text, setText] = useState("");
   useEffect(() => { setLines([{ who: "brain", text: hint || "Ask about services, policy, or the sample pipeline. Payroll stays excluded.", cite: "Sample · not a connected model" }]); }, [title, hint]);
@@ -346,10 +415,14 @@ function BrainChat({ title, abstain, hint }: { title: string; abstain: boolean; 
     const cite = answer.refused ? answer.cite : abstain ? answer.cite : `${answer.cite} · abstain preview is off, source still required`;
     setLines((prev) => [...prev, { who: "you", text: question }, { who: "brain", text: answer.text, cite }]);
     setText("");
+    setOpen(true);
   }
-  return <section className="card pad" aria-label={title}><div className="ch"><h2>{title}</h2><span className="pill a"><i />Sample</span></div>
-    <div>{lines.map((line, index) => <div className={line.who === "you" ? "chatline you" : "chatline"} key={index}><b>{line.who === "you" ? "You" : "Brain"}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div>
-    <div className="deptpick">{["What services do we sell?", "Who owns the leave policy?", "Show me payroll"].map((prompt) => <button type="button" className="btn sm ghost" key={prompt} onClick={() => ask(prompt)}>{prompt}</button>)}</div>
-    <form className="ask" onSubmit={(event) => { event.preventDefault(); ask(text); }}><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask the sample brain" /><button className="btn" type="submit">Ask</button></form>
+  return <section className="chatdock" aria-label={title}>
+    {open && <div className="log">{lines.map((line, index) => <div className={line.who === "you" ? "chatline you" : "chatline"} key={index}><b>{line.who === "you" ? "You" : title}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div>}
+    <form className="ask" onSubmit={(event) => { event.preventDefault(); ask(text); }}>
+      <button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button>
+      <input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder={`Ask ${title}`} />
+      <button className="btn" type="submit">Ask</button>
+    </form>
   </section>;
 }

@@ -205,3 +205,11 @@ button, input, select, textarea { font: inherit; }
 @media (max-width: 1100px) {
   .worksplit, .rowform, .rowform.four { grid-template-columns: 1fr; }
 }
+.botmenu { display: grid; gap: 2px; margin: 0 0 8px 10px; }
+.donut-wrap { display: flex; gap: 18px; align-items: center; }
+.donut-wrap ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.trend { width: 100%; height: 148px; display: block; }
+.chatdock { position: fixed; z-index: 25; left: var(--side); right: 0; bottom: 0; background: rgba(255,255,255,.96); border-top: 1px solid var(--line); padding: 10px 16px 12px; backdrop-filter: blur(10px); }
+.chatdock .log { max-height: 36vh; overflow: auto; margin-bottom: 8px; }
+.live-pad { padding-bottom: 92px; }
+@media (max-width: 860px) { .chatdock { left: 0; } }

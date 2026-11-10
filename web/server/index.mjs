@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
 import { Github, validateRepo, validateUpload, cleanPMState } from "./github.mjs";
 import { createDepartmentStore, handleDepartmentApi } from "./departments.mjs";
+import { ceoDashboard, ceoDepartment } from "./ceo-dashboard.mjs";
 import { runtimeConfig } from "./runtimes.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,6 +46,12 @@ function sameOrigin(req) {
 async function handleApi(req, res) {
   if (!sameOrigin(req)) return json(res, 403, { error: "Local origin required." });
   if (req.method === "GET" && req.url === "/api/health") return json(res, 200, { ok: true, githubTokenConfigured: Boolean(process.env.GITHUB_TOKEN), mode: "local-preview" });
+  if (req.method === "GET" && req.url === "/api/ceo/dashboard") return json(res, 200, ceoDashboard());
+  const dashboardDept = req.url?.match(/^\/api\/ceo\/dashboard\/([a-z0-9-]+)$/);
+  if (req.method === "GET" && dashboardDept) {
+    const report = ceoDepartment(dashboardDept[1]);
+    return json(res, report ? 200 : 404, report || { error: "Unknown department." });
+  }
   if (req.url?.startsWith("/api/departments") || req.url === "/api/runtime/status") return handleDepartmentApi(req, res, { store: departmentStore, config: runtimes, readJson, json });
   if (req.method !== "POST") return json(res, 405, { error: "Method not allowed." });
   const body = await readJson(req);
