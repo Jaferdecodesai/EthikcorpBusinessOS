@@ -1,0 +1,9 @@
+.source-card { display: grid; gap: 8px; }
+.source-card dl { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 4px 12px; margin: 0; }
+.source-card dt { color: var(--muted); font-size: 12px; font-weight: 600; }
+.source-card dd { margin: 0; color: var(--ink); }
+.import-errors { margin: 12px 0 0; padding-left: 18px; color: var(--red); }
+.targets { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) {
+  .source-card dl, .targets { grid-template-columns: 1fr; }
+}

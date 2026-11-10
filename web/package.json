@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/*.test.mjs",
     "build:cloudflare": "VITE_HOSTING=cloudflare npm run build",
+    "build:phase1": "vite build --config phase1/vite.config.ts",
     "cloudflare:dev": "npx --yes --package node@22 node node_modules/wrangler/bin/wrangler.js dev --port 8787",
     "cloudflare:deploy": "npm run cloudflare:publish-established",
     "cloudflare:publish-established": "npm run build:cloudflare && npx --yes --package node@22 node node_modules/wrangler/bin/wrangler.js deploy --config wrangler.established.toml --keep-vars"

@@ -1,0 +1,35 @@
+# Customer Phase 1 portal. This is a new Worker.
+# Do not deploy wrangler.established.toml for this app.
+# That file stays on ethikcorp-superbrain and is not changed here.
+#
+# Deploy, after wrangler login, from the web directory:
+#   npx wrangler d1 create ethikcorpbrainphase1-db --config phase1/wrangler.toml
+#   Replace database_id below with the id that command prints.
+#   npx wrangler d1 migrations apply ethikcorpbrainphase1-db --remote --config phase1/wrangler.toml
+#   printf '%s' 'choose-a-customer-code' | npx wrangler secret put ACCESS_CODE --config phase1/wrangler.toml
+#   printf '%s' 'choose-a-staff-code' | npx wrangler secret put STAFF_CODE --config phase1/wrangler.toml
+#   printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put SESSION_SECRET --config phase1/wrangler.toml
+#   npm run build:phase1
+#   npx wrangler deploy --config phase1/wrangler.toml
+#
+# Invite link, after deploy: https://ethikcorpbrainphase1.<account>.workers.dev/enter?code=<ACCESS_CODE>
+# database_id is a placeholder until `wrangler d1 create` is run. This VM is not authenticated.
+
+name = "ethikcorpbrainphase1"
+main = "worker.mjs"
+compatibility_date = "2026-10-19"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+account_id = "80114e86d2b31e6086ffa21c0ecda3ec"
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "single-page-application"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ethikcorpbrainphase1-db"
+database_id = "REPLACE_AFTER_D1_CREATE"
+migrations_dir = "migrations"
