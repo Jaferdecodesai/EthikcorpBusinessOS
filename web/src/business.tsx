@@ -21,29 +21,20 @@ type Access = {
 
 const dash = ceoDashboard();
 
-const TONES = [
-  { bg: "#09A5EC", fg: "#03050A" },
-  { bg: "#FD7152", fg: "#03050A" },
-  { bg: "#D6FD21", fg: "#03050A" },
-  { bg: "#B70F16", fg: "#FFFFFF" },
-  { bg: "#3E494E", fg: "#FFFFFF" },
-  { bg: "#03050A", fg: "#D6FD21" },
-  { bg: "#202020", fg: "#FFFFFF" },
-  { bg: "#09A5EC", fg: "#03050A" },
-  { bg: "#FD7152", fg: "#03050A" }
-];
+const FACE_CYCLE = ["#09A5EC", "#FD7152", "#D6FD21"];
+const BAR_CYCLE = ["#09A5EC", "#FD7152", "#D6FD21"];
 
-const FACES: Record<string, { bg: string; fg: string; bar: string; ink: string }> = {
-  sales: { bg: "#09A5EC", fg: "#03050A", bar: "#09A5EC", ink: "#03050A" },
-  marketing: { bg: "#FD7152", fg: "#03050A", bar: "#FD7152", ink: "#03050A" },
-  delivery: { bg: "#D6FD21", fg: "#03050A", bar: "#D6FD21", ink: "#03050A" },
-  technology: { bg: "#03050A", fg: "#FFFFFF", bar: "#03050A", ink: "#D6FD21" },
-  finance: { bg: "#B70F16", fg: "#FFFFFF", bar: "#B70F16", ink: "#FFFFFF" },
-  hr: { bg: "#3E494E", fg: "#FFFFFF", bar: "#3E494E", ink: "#FFFFFF" },
-  operations: { bg: "#202020", fg: "#D6FD21", bar: "#202020", ink: "#D6FD21" },
-  "client-success": { bg: "#CACACA", fg: "#03050A", bar: "#CACACA", ink: "#03050A" },
-  legal: { bg: "#DDDED7", fg: "#03050A", bar: "#B70F16", ink: "#FFFFFF" }
-};
+function faceFor(id: string) {
+  const index = catalog.findIndex((item) => item.id === id);
+  return { bg: FACE_CYCLE[(index < 0 ? 0 : index) % FACE_CYCLE.length], fg: "#03050A" };
+}
+
+function stageClass(id: string, status: string) {
+  if (id === "finetune" || status === "blocked" || status === "held") return "attn";
+  if (status === "done") return "done";
+  if (status === "running" || status === "in_progress") return "run";
+  return "wait";
+}
 
 function svgProps(size: number) {
   return { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
@@ -94,14 +85,9 @@ function Ring({ percent }: { percent: number }) {
   const done = (Math.min(100, Math.max(0, percent)) / 100) * turn;
   return <div className="ring-wrap">
     <svg viewBox="0 0 180 180" role="img" aria-label={`Build progress ${percent} percent`}>
-      <defs>
-        <linearGradient id="build-ring" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#D6FD21" />
-          <stop offset="100%" stopColor="#09A5EC" />
-        </linearGradient>
-      </defs>
-      <circle cx="90" cy="90" r={radius} fill="none" stroke="url(#build-ring)" strokeOpacity="0.35" strokeWidth="14" />
-      <circle cx="90" cy="90" r={radius} fill="none" stroke="url(#build-ring)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${done} ${turn - done}`} transform="rotate(-90 90 90)" />
+      <circle cx="90" cy="90" r={radius} fill="none" stroke="#03050A" strokeWidth="18" />
+      <circle cx="90" cy="90" r={radius} fill="none" stroke="#09A5EC" strokeWidth="14" />
+      {done > 0 && <circle cx="90" cy="90" r={radius} fill="none" stroke="#D6FD21" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${done} ${turn - done}`} transform="rotate(-90 90 90)" />}
     </svg>
     <div className="ring-num">{percent}<small>%</small></div>
   </div>;
@@ -118,8 +104,8 @@ function TrendLine({ points }: { points: { week: string; netHours: number }[] })
   });
   const d = coords.map((pair, index) => `${index ? "L" : "M"}${pair[0]},${pair[1]}`).join(" ");
   return <svg className="trend" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={points.map((point) => `${point.week} ${point.netHours}`).join(", ")}>
-    <path d={d} fill="none" stroke="#D6FD21" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
-    {coords.map((pair, index) => <circle key={points[index].week} cx={pair[0]} cy={pair[1]} r="4.5" fill="#09A5EC" />)}
+    <path d={d} fill="none" stroke="#03050A" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
+    {coords.map((pair, index) => <circle key={points[index].week} cx={pair[0]} cy={pair[1]} r="4.5" fill="#03050A" />)}
   </svg>;
 }
 
@@ -153,18 +139,20 @@ export function BusinessApp() {
   const allowed = !current || current.enabled;
   return <div className="portal">
     <aside className="side" aria-label="Ethikcorp BusinessOS">
+      <div className="side-stick">
       <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
       <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`}><i className={`navdot ${item.id}`} />{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it"><i className={`navdot ${item.id}`} />{item.label}</button>)}</nav>
       <div className="sidefoot">{state?.role === "dev" ? "Development team. All three areas are open." : "Customer view. Locked areas open from live build progress."}</div>
+      </div>
     </aside>
     <div className="maincol">
       <header className="topbar">
         <div className="ctx"><span>Ethikcorp BusinessOS</span><span aria-hidden="true">/</span><b>{tab === "brain" ? "BusinessBrain" : tab === "bots" ? "Businessbots" : "BusinessBrain Builder"}</b></div>
-        <div className="pills"><span className="pill a"><i />Prototype · not UAE-hosted</span><span className="pill r"><i />No base model connected</span></div>
+        <div className="pills"><span className="pill a"><i />Prototype · not UAE-hosted</span><span className="pill badge"><i />No base model connected</span></div>
       </header>
       <div className="page live-pad">
         {error && <div className="banner-need" role="alert">{error}</div>}
-        {!allowed && <Locked percent={state?.percent || 0} what={tab} />}
+        {!allowed && <Locked percent={state?.percent || 0} what={tab} departments={state?.departments || []} />}
         {allowed && tab === "pm" && state && <Project state={state} reload={reload} />}
         {allowed && tab === "brain" && state && <Brain state={state} />}
         {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
@@ -173,29 +161,31 @@ export function BusinessApp() {
   </div>;
 }
 
-function Locked({ percent, what }: { percent: number; what: string }) {
+function Locked({ percent, what, departments }: { percent: number; what: string; departments: { confirmed: boolean }[] }) {
   const bots = what === "bots";
+  const confirmed = departments.filter((department) => department.confirmed).length;
+  const shown = bots ? Math.round((confirmed / 9) * 100) : percent;
   return <div className="lock-stage">
     <div className="lock-preview" aria-hidden="true">
       <div className="bento">
-        <article className="tile sky"><div className="l">Indexed</div><div className="v">0</div></article>
-        <article className="tile lime"><div className="l">Passages</div><div className="v">0</div></article>
-        <article className="tile coral"><div className="l">Tasks</div><div className="v">66</div></article>
-        <article className="tile ink"><div className="l">Model</div><div className="v">—</div></article>
-        <article className="tile red span2"><div className="l">{bots ? "Departments" : "Hours"}</div><div className="v">{bots ? "9" : "25.2"}</div></article>
-        <article className="tile slate span2"><div className="l">Sample</div><div className="v">{percent}%</div></article>
-        <article className="tile coral"><div className="l">People</div><div className="v">27</div></article>
-        <article className="tile ink"><div className="l">Runs</div><div className="v">59</div></article>
-        <article className="tile lime span2"><div className="l">Automations</div><div className="v">19</div></article>
+        <article className="tile sky"><div className="l">{bots ? "Confirmed" : "Indexed"}</div><div className="v">{bots ? confirmed : 0}</div></article>
+        <article className="tile lime"><div className="l">{bots ? "Departments" : "Passages"}</div><div className="v">{bots ? 9 : 0}</div></article>
+        <article className="tile coral"><div className="l">Progress</div><div className="v">{shown}%</div></article>
+        <article className="tile sky"><div className="l">{bots ? "Open" : "Left"}</div><div className="v">{bots ? 9 - confirmed : 0}</div></article>
+        <article className="tile lime span2"><div className="l">{bots ? "Workflows" : "Hours"}</div><div className="v">{bots ? "Templates" : "0"}</div></article>
+        <article className="tile coral span2"><div className="l">Still building</div><div className="v">{shown}%</div></article>
+        <article className="tile sky"><div className="l">Build</div><div className="v">{shown}</div></article>
+        <article className="tile lime"><div className="l">Ready</div><div className="v">{bots ? confirmed : 0}</div></article>
+        <article className="tile coral span2"><div className="l">Attention</div><div className="v">{bots ? 9 - confirmed : 0}</div></article>
       </div>
     </div>
     <section className="lock-card">
       <div className="lock-badge">Locked</div>
       <div className="eyebrow">Still building</div>
-      <h1>{bots ? "Businessbots is waiting for department confirmation" : "BusinessBrain is being built"}</h1>
-      <p className="ring-num" style={{ position: "static", justifyContent: "flex-start", color: "#03050a", margin: "12px 0 8px" }}>{percent}<small>%</small></p>
-      <div className="meter" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div>
-      <p className="note">This percentage counts finished pipeline stages. It is not a forecast.</p>
+      <h1>{bots ? "Your department Businessbots are being built" : "BusinessBrain is being built"}</h1>
+      <Ring percent={shown} />
+      <div className="meter" role="progressbar" aria-valuenow={shown} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${shown}%` }} /></div>
+      <p className="note">{bots ? `${confirmed} of 9 departments confirmed. This percentage counts confirmed departments. It is not a forecast.` : "This percentage counts finished pipeline stages. It is not a forecast."}</p>
     </section>
   </div>;
 }
@@ -226,7 +216,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
     <Outline state={state} />
     <Ownership reload={reload} />
     <Handoff reload={reload} />
-    <section className="card band-card lift"><div className="card-band ink">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p></div></section>
+    <section className="card band-card lift"><div className="card-band coral">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p></div></section>
     {state.role === "dev" && <DevTools state={state} reload={reload} />}
   </>;
 }
@@ -234,13 +224,12 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
 function Outline({ state }: { state: Access }) {
   const stages = [...Object.entries(state.stages), ["finetune", { status: "held", detail: state.finetune.detail }] as const];
   return <section aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2></div>
-    <div className="pipe">{stages.map(([id, stage], index) => {
-      const tone = TONES[index % TONES.length];
-      const label = id === "finetune" ? "Not runnable here" : stage.status === "done" ? "Done" : "Not started";
-      return <article className="pipe-card lift" key={id} style={{ background: tone.bg, color: tone.fg }}>
+    <div className="pipe">{stages.map(([id, stage]) => {
+      const label = id === "finetune" ? "Not runnable here" : stage.status === "done" ? "Done" : stage.status === "running" ? "Running" : "Not started";
+      return <article className={`pipe-card ${stageClass(id, stage.status)} lift`} key={id}>
         <div className="pipe-top"><StageIcon id={id} /><b>{id === "finetune" ? "Fine-tune" : id}</b></div>
         <small>{stage.detail}</small>
-        <span className="pipe-status" style={{ background: tone.fg, color: tone.bg }}>{label}</span>
+        <span className="pipe-status">{label}</span>
       </article>;
     })}</div>
   </section>;
@@ -287,22 +276,19 @@ function Handoff({ reload }: { reload: () => Promise<void> }) {
 
 function DevTools({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [link, setLink] = useState("");
-  return <section className="card band-card lift"><div className="card-band slate">Development pipeline</div><div className="pad">
+  return <section className="card band-card lift"><div className="card-band sky">Development pipeline</div><div className="pad">
     <p>Collection, cleaning, parsing, chunking, embedding, vectors, RAG, evaluation, and connectors are the stages above. Fine-tuning is listed and is not running.</p>
     <p className="note">GitHub: {state.connectors.github.ok ? "token present" : `missing ${state.connectors.github.missing?.join(", ")}`}. Drive: {state.connectors.drive.ok ? "OAuth present" : `missing ${state.connectors.drive.missing?.join(", ")}`}. No files are fetched from either until those credentials exist.</p>
     <button type="button" className="btn ghost" onClick={async () => { const result = await api("/api/brain/bootstrap-dev", {}); setLink(result.url || result.error || ""); }}>Issue the development invite</button>
     {link && <p className="note">Give this URL only to the development team. It is signed with the existing session secret.</p>}
     {link && <p><a href={link}>{link}</a></p>}
     <div className="ch"><h2>Confirm departments</h2></div>
-    {state.departments.map((department) => <div className="plainrow" key={department.id}><span className="navdot" style={{ background: FACES[department.id]?.bg || "#09A5EC", width: 14, height: 14, boxShadow: "inset 0 0 0 1.5px #03050A" }} /><span><b>{department.name}</b><small>{department.workflows.join(", ")}</small></span><button type="button" className="btn sm" disabled={department.confirmed} onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>{department.confirmed ? "Confirmed" : "Confirm"}</button></div>)}
+    {state.departments.map((department) => <div className="plainrow" key={department.id}><span className="navdot" style={{ background: faceFor(department.id).bg, width: 14, height: 14, boxShadow: "inset 0 0 0 1.5px #03050A" }} /><span><b>{department.name}</b><small>{department.workflows.join(", ")}</small></span><button type="button" className="btn sm" disabled={department.confirmed} onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>{department.confirmed ? "Confirmed" : "Confirm"}</button></div>)}
     </div></section>;
 }
 
 function Brain({ state }: { state: Access }) {
-  const hourRows = dash.hourBars.map((row) => {
-    const face = FACES[row.id] || FACES.sales;
-    return { ...row, note: "estimate", color: face.bar, ink: face.ink };
-  });
+  const hourRows = dash.hourBars.map((row, index) => ({ ...row, note: "estimate", color: BAR_CYCLE[index % BAR_CYCLE.length], ink: "#03050A" }));
   return <>
     <header className="greet">
       <div>
@@ -315,17 +301,17 @@ function Brain({ state }: { state: Access }) {
     <div className="bento">
       <article className="tile sky lift"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article>
       <article className="tile lime lift"><div className="l">Passages</div><div className="v">{state.chunks}</div></article>
-      <article className="tile coral lift"><div className="l">Demo tasks</div><div className="v">{dash.company.tasksDone}/{dash.company.tasksOpen}</div><div className="x">Sample snapshot</div></article>
-      <article className="tile ink lift"><div className="l">Model</div><div className="v" style={{ fontSize: 28 }}>Not connected</div></article>
+      <article className="tile sky lift"><div className="l">Demo tasks</div><div className="v">{dash.company.tasksDone}/{dash.company.tasksOpen}</div><div className="x">Sample snapshot</div></article>
+      <article className="tile coral lift"><div className="l">Model</div><div className="v" style={{ fontSize: 28 }}>Not connected</div></article>
       <section className="card band-card lift span2"><div className="card-band sky">Sample net hours</div><div className="pad"><BarList bold caption="Sample net hours per week from the setup model. Not measured." rows={hourRows} /></div></section>
       <section className="card band-card lift span2"><div className="card-band coral">Lead mix</div><div className="pad"><div className="mix">{dash.pipeline.map((item) => <div className={`mix-cell ${item.label.toLowerCase()}`} key={item.label}><b>{item.value}</b><span>{item.label}</span></div>)}</div><p className="note">{dash.pipelineNote}</p></div></section>
-      <article className="tile ink lift span2"><div className="l">Illustrative week</div><TrendLine points={dash.trend} /><div className="x">{dash.trendNote}</div></article>
+      <article className="tile lime lift span2"><div className="l">Illustrative week</div><TrendLine points={dash.trend} /><div className="x">{dash.trendNote}</div></article>
       <article className="tile lime lift"><div className="l">Automations</div><div className="v">{dash.company.automations}</div><div className="x">Setup model. Not running.</div></article>
-      <article className="tile red lift"><div className="l">ClickUp</div><div className="v">{dash.company.clickupOpenTasks}</div><div className="x">Open tasks. Sample snapshot.</div></article>
+      <article className="tile coral lift"><div className="l">ClickUp</div><div className="v">{dash.company.clickupOpenTasks}</div><div className="x">Open tasks. Sample snapshot.</div></article>
       <article className="tile sky lift"><div className="l">People</div><div className="v">{dash.company.employees}</div><div className="x">Demo snapshot.</div></article>
-      <article className="tile coral lift"><div className="l">Hours logged</div><div className="v">{dash.company.hoursLogged}</div><div className="x">Sample snapshot.</div></article>
-      <article className="tile slate lift"><div className="l">Demo hours saved</div><div className="v">{dash.company.hoursSavedDemo}</div><div className="x">Not measured.</div></article>
-      <article className="tile ink lift"><div className="l">Runs / week</div><div className="v">{dash.company.runsPerWeek}</div><div className="x">Sample model.</div></article>
+      <article className="tile lime lift"><div className="l">Hours logged</div><div className="v">{dash.company.hoursLogged}</div><div className="x">Sample snapshot.</div></article>
+      <article className="tile coral lift"><div className="l">Demo hours saved</div><div className="v">{dash.company.hoursSavedDemo}</div><div className="x">Not measured.</div></article>
+      <article className="tile sky lift"><div className="l">Runs / week</div><div className="v">{dash.company.runsPerWeek}</div><div className="x">Sample model.</div></article>
     </div>
     <ChatDock />
   </>;
@@ -335,20 +321,19 @@ function Bots({ hash, state, reload }: { hash: string; state: Access; reload: ()
   const selected = hash.split("/")[1];
   const department = catalog.find((item) => item.id === selected);
   if (!department) return <div className="dept-grid">{catalog.map((item) => {
-    const face = FACES[item.id] || FACES.sales;
+    const face = faceFor(item.id);
     const sample = dash.departments.find((row) => row.id === item.id);
     const hours = sample?.netHoursPerWeek ?? 0;
     const spark = dash.trend.map((point) => point.netHours * (dash.company.netHoursPerWeek ? hours / dash.company.netHoursPerWeek : 0));
-    const sparkInk = ["#09A5EC", "#FD7152", "#D6FD21", "#CACACA", "#DDDED7"].includes(face.bar) ? "#03050A" : face.bar;
     return <a className="dept-card lift" key={item.id} href={`#bots/${item.id}`}>
-      <div className="dept-face" style={{ background: face.bg, color: face.fg }}><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div><div className="dept-metric">{hours}</div><div className="dept-kicker">Sample net h/week</div></div></div>
-      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p><Spark values={spark} color={sparkInk} /></div>
+      <div className="dept-face" style={{ background: face.bg, color: face.fg }}><div className="dept-face-row"><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div><div className="dept-metric">{hours}</div><div className="dept-kicker">Sample net h/week</div></div></div><Spark values={spark} color="#03050A" /></div>
+      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p></div>
     </a>;
   })}</div>;
-  const face = FACES[department.id] || FACES.sales;
+  const face = faceFor(department.id);
   return <>
     <header className="dept-hero" style={{ background: face.bg, color: face.fg }}><div><div className="dept-kicker">{department.code}</div><h1>{department.name}</h1><p className="sub" style={{ color: "inherit" }}>{department.mandate}</p></div><a className="btn ghost" href="#bots">All departments</a></header>
-    <section className="card pad"><div className="ch"><h2>Workflows</h2><span className="note">{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed by the development team" : "Not confirmed"}</span></div>
+    <section className="card pad"><div className="ch"><h2>Workflows</h2><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "state-chip done" : "state-chip attn"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed by the development team" : "Not confirmed"}</span></div>
       {department.workflows.map((workflow) => <div className="plainrow" key={workflow.id}><span /><span><b>{workflow.name}</b><small>{workflow.description}</small></span><span className="note">Template · not running</span></div>)}
     </section>
     {state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>Confirm this department</button>}
