@@ -1,0 +1,41 @@
+name: Review ethikcorp-businessos-review
+
+# Manual only. Nothing runs on push, and this file never deploys
+# ethikcorp-superbrain. The owner adds CLOUDFLARE_API_TOKEN in GitHub
+# Actions secrets before dispatching. The token needs Workers Scripts
+# edit on the account. Dispatch deploys web/wrangler.review.toml, which
+# creates or updates the separate worker ethikcorp-businessos-review
+# and its own Durable Object namespace. It adds an AI binding named AI.
+#
+# Workers Builds equivalent, if you would rather use the dashboard:
+# - Production branch stays cursor/superbrain-design-directions-83a1
+#   on wrangler.established.toml. Do not change that trigger.
+# - Add a second build whose branch is cursor/businessos-redesign-review.
+# - Root directory: web
+# - Build command: npm ci && npm test && npm run build:cloudflare
+# - Deploy command: npx wrangler deploy --config wrangler.review.toml
+# - Binding: AI, type Workers AI, name AI
+# - Do not copy SESSION_SECRET from the production worker into the repo.
+on:
+  workflow_dispatch:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:cloudflare
+      - name: Deploy the review worker only
+        run: npx wrangler deploy --config wrangler.review.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

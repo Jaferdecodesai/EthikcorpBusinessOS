@@ -27,7 +27,7 @@ export function publicBrain(brain, role, connectors, env = {}) {
   };
 }
 
-export async function handleBrain(brain, { method, pathname, body, role, sessionId, secret, connectors, env, fetchImpl }) {
+export async function handleBrain(brain, { method, pathname, body, role, sessionId, secret, connectors, env, fetchImpl, onStep }) {
   const current = brain || emptyBrain();
   if (method === "GET" && pathname === "/api/brain/state") return { brain: current, status: 200, data: publicBrain(current, role, connectors, env) };
   if (method === "POST" && pathname === "/api/brain/claim") {
@@ -66,7 +66,7 @@ export async function handleBrain(brain, { method, pathname, body, role, session
     const access = portalAccess(role, current);
     const area = body.area === "bots" ? "bots" : "brain";
     if (!access.tabs.find((tab) => tab.id === area)?.enabled) return { brain: current, status: 403, data: { error: area === "bots" ? "Ethikcorp Businessbots are still being built." : "Ethikcorp BusinessBrain is still building." } };
-    const data = await runAgent(current, body.question || "", { ai: env?.AI, departmentId: body.departmentId });
+    const data = await runAgent(current, body.question || "", { ai: env?.AI, departmentId: body.departmentId, onStep });
     return { brain: current, status: 200, data };
   }
   if (method === "POST" && pathname === "/api/brain/pin") {

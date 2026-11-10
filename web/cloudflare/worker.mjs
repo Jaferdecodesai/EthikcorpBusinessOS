@@ -99,7 +99,15 @@ export class PreviewWorkspace extends DurableObject {
         const sessionId=request.headers.get("x-brain-session")||"";
         const stored=this.loadBrain();
         const role=stored?.roles?.[sessionId]||"customer";
-        const result=await handleBrain(stored,{method:request.method,pathname:url.pathname,body,role,sessionId,secret:"",env:this.env,connectors:{github:Boolean(this.env.GITHUB_TOKEN),drive:Boolean(this.env.GOOGLE_OAUTH_CLIENT_ID&&this.env.GOOGLE_OAUTH_CLIENT_SECRET)}});
+        const connectors={github:Boolean(this.env.GITHUB_TOKEN),drive:Boolean(this.env.GOOGLE_OAUTH_CLIENT_ID&&this.env.GOOGLE_OAUTH_CLIENT_SECRET)};
+        if(url.pathname==="/api/brain/ask"&&String(request.headers.get("accept")||"").includes("application/x-ndjson")){
+          const encoder=new TextEncoder();
+          const stream=new ReadableStream({start:(controller)=>{
+            handleBrain(stored,{method:request.method,pathname:url.pathname,body,role,sessionId,secret:"",env:this.env,connectors,onStep:(step)=>controller.enqueue(encoder.encode(`${JSON.stringify({type:"step",step})}\n`))}).then((result)=>{if(result.brain)this.saveBrain(result.brain);controller.enqueue(encoder.encode(`${JSON.stringify({type:"done",...result.data})}\n`));controller.close();}).catch((error)=>{controller.enqueue(encoder.encode(`${JSON.stringify({type:"done",error:error.message||"Brain request failed."})}\n`));controller.close();});
+          }});
+          return new Response(stream,{headers:{"Content-Type":"application/x-ndjson; charset=utf-8","Cache-Control":"no-store"}});
+        }
+        const result=await handleBrain(stored,{method:request.method,pathname:url.pathname,body,role,sessionId,secret:"",env:this.env,connectors});
         if(result.brain)this.saveBrain(result.brain);
         return json(result.data,result.status);
       }catch(error){return json({error:error.message||"Brain request failed."},400);}

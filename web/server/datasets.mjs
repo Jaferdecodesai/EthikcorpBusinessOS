@@ -79,14 +79,29 @@ function round(value) {
 
 export function buildChart(rows, options) {
   const type = options.type || "bar";
+  let spec;
   if (type === "line" || type === "area") {
     const months = [...new Set(rows.map((row) => row.month_label || row.month))];
     const names = [...new Set(rows.map((row) => row.service_line || row[options.series]))];
-    return { id: `chart-${type}-${months.length}`, type, title: options.title, sample: true, unit: options.unit || "AED", categories: months, series: names.map((name, index) => ({ name, color: index % 3, values: months.map((month) => { const found = rows.find((row) => (row.month_label || row.month) === month && (row.service_line || row[options.series]) === name); return found ? Number(found.revenue_aed || found.value) || 0 : 0; }) })) };
+    spec = { id: `chart-${type}-${months.join("-")}`, type, title: options.title, sample: true, unit: options.unit || "AED", categories: months, series: names.map((name, index) => ({ name, color: index % 3, values: months.map((month) => { const found = rows.find((row) => (row.month_label || row.month) === month && (row.service_line || row[options.series]) === name); return found ? Number(found.revenue_aed || found.value) || 0 : 0; }) })) };
+  } else if (type === "funnel" || type === "donut" || type === "bar") {
+    spec = { id: `chart-${type}-${rows.length}-${options.title}`, type, title: options.title, sample: true, unit: options.unit || "AED", series: rows.map((row) => ({ name: String(row.stage || row.service_line || row.department || row.label || ""), value: Number(row.value ?? row.value_aed ?? row.utilisation_pct) || 0 })) };
+  } else if (type === "table" || type === "kpi") spec = { id: `chart-${type}-${options.title}`, type, title: options.title, sample: true, unit: options.unit || "", series: rows };
+  else spec = { id: "chart-flow", type: "flow", title: options.title, sample: true, series: rows };
+  spec.summary = chartSummary(spec);
+  return spec;
+}
+
+export function chartSummary(spec) {
+  const series = spec.series || [];
+  if (series[0]?.values) {
+    const totals = (spec.categories || []).map((_, index) => series.reduce((sum, item) => sum + (Number(item.values?.[index]) || 0), 0));
+    const total = totals.reduce((sum, value) => sum + value, 0);
+    const change = totals[0] ? Math.round(((totals[totals.length - 1] - totals[0]) / totals[0]) * 1000) / 10 : null;
+    const ranked = series.map((item) => ({ name: item.name, value: (item.values || []).reduce((sum, value) => sum + value, 0) })).sort((left, right) => right.value - left.value);
+    return { total: Math.round(total), change, best: ranked[0] || null, worst: ranked[ranked.length - 1] || null };
   }
-  if (type === "funnel" || type === "donut" || type === "bar") {
-    return { id: `chart-${type}-${rows.length}`, type, title: options.title, sample: true, unit: options.unit || "AED", series: rows.map((row) => ({ name: String(row.stage || row.service_line || row.department || row.label || ""), value: Number(row.value ?? row.value_aed ?? row.utilisation_pct) || 0 })) };
-  }
-  if (type === "table" || type === "kpi") return { id: `chart-${type}`, type, title: options.title, sample: true, unit: options.unit || "", series: rows };
-  return { id: "chart-flow", type: "flow", title: options.title, sample: true, series: rows };
+  const ranked = series.map((item) => ({ name: item.name, value: Number(item.value) || 0 })).filter((item) => item.name).sort((left, right) => right.value - left.value);
+  const total = Math.round(ranked.reduce((sum, item) => sum + item.value, 0));
+  return { total, change: null, best: ranked[0] || null, worst: ranked[ranked.length - 1] || null };
 }

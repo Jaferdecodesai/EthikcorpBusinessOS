@@ -28,14 +28,16 @@ export function proposeAutomations(map, datasets) {
   return (map?.flows || []).slice(0, 5).map((flow, index) => {
     const hoursSavedPerMonth = Math.round(flow.weeklyHours * 4 * 0.4 * 10) / 10;
     const impactAed = rate == null ? null : Math.round(hoursSavedPerMonth * rate);
+    const concrete = automationFromFlow(flow);
     return {
       id: `${map.departmentId}-${index + 1}`,
       departmentId: map.departmentId,
       name: `Automate ${flow.title}`,
-      trigger: `A new item arrives for ${flow.title}`,
-      steps: flow.steps,
-      tools: ["Ethikcorp BusinessBrain", "department task list"],
-      schedule: "Weekdays, when a new item arrives",
+      trigger: concrete.trigger,
+      steps: concrete.steps,
+      chain: concrete.chain,
+      tools: concrete.tools,
+      schedule: "Weekdays, when the trigger arrives",
       hoursSavedPerMonth,
       formula: "weekly_hours × 4 × 0.4",
       assumption: "40% of the weekly manual hours stated in the workflow file",
@@ -45,4 +47,35 @@ export function proposeAutomations(map, datasets) {
       sample: true
     };
   });
+}
+
+export function automationFromFlow(flow) {
+  const blob = `${flow.title} ${flow.steps.join(" ")}`.toLowerCase();
+  let trigger = shorten(flow.steps[0] || flow.title);
+  if (/form|whatsapp|linkedin/.test(blob) && /lead|bizscan|enquir/.test(blob)) trigger = "New lead in a form, WhatsApp or LinkedIn";
+  else if (/invoice|billing|signed proposal|milestone/.test(blob)) trigger = "Signed proposal or a milestone is reached";
+  else if (/wordpress|blog|content topic/.test(blob)) trigger = "A content topic is agreed";
+  else if (/campaign|bizscan/.test(blob)) trigger = "A BizScan or campaign reply arrives";
+  else if (/schedul|venue|calendar/.test(blob)) trigger = "A training date is agreed";
+  else if (/overdue|collection|chas/.test(blob)) trigger = "An invoice passes its due date";
+  else if (/pipeline|stage|follow-up/.test(blob)) trigger = "The weekly pipeline review starts";
+  const steps = flow.steps.map(shorten);
+  const tools = [];
+  if (/whatsapp/.test(blob)) tools.push("WhatsApp");
+  if (/form|website/.test(blob)) tools.push("website form");
+  if (/linkedin/.test(blob)) tools.push("LinkedIn");
+  if (/bizscan/.test(blob)) tools.push("BizScan");
+  if (/spreadsheet/.test(blob)) tools.push("lead spreadsheet");
+  if (/email/.test(blob)) tools.push("email");
+  if (/calendar/.test(blob)) tools.push("calendar");
+  if (/proposal|word\b/.test(blob)) tools.push("proposal template");
+  if (/wordpress/.test(blob)) tools.push("WordPress");
+  if (/invoice|ledger|vat/.test(blob)) tools.push("accounting ledger");
+  if (!tools.length) tools.push("department checklist");
+  const chain = [trigger, ...steps.slice(0, 4)].filter((item, index, list) => list.indexOf(item) === index).join(" → ");
+  return { trigger, steps, tools: tools.slice(0, 5), chain };
+}
+
+function shorten(step) {
+  return String(step || "").replace(/\(.*?\)/g, "").replace(/\.$/, "").trim().slice(0, 80);
 }

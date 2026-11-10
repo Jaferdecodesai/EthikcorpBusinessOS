@@ -7,6 +7,8 @@ import { handleBrain } from "../server/brain-api.mjs";
 import { emptyBrain, portalAccess } from "../server/brain-pipeline.mjs";
 import { ingestDemoFile, probeDrive } from "../server/demo-intake.mjs";
 import { parseWorkflow, proposeAutomations } from "../server/workflows.mjs";
+import { runAgent } from "../server/agent.mjs";
+import { narrativeIsGrounded } from "../server/llm/status.mjs";
 
 const RAW = "https://raw.githubusercontent.com/Jaferdecodesai/ethikcorp-businessos-demo-data/main/";
 
@@ -58,6 +60,20 @@ test("a workflow file proposes automations from its stated hours", async () => {
   assert.ok(map.flows[0].weeklyHours > 0);
   const proposals = proposeAutomations(map, { revenue: { rows: [{ revenue_aed: 9600000 }] }, hours: { rows: [{ billable_hours_oct_2026: 1592 }] } });
   assert.ok(proposals.length >= 1);
+  assert.match(proposals[0].trigger, /form|WhatsApp|BizScan/i);
+  assert.doesNotMatch(proposals[0].trigger, /A new item arrives/);
+  assert.match(proposals[0].chain, /→/);
   assert.equal(proposals[0].formula, "weekly_hours × 4 × 0.4");
   assert.equal(proposals[0].impactAed, Math.round(proposals[0].hoursSavedPerMonth * (9600000 / 12 / 1592)));
+});
+
+test("a model narrative is kept only when every number is in the tool output", async () => {
+  const brain = { documents: [], chunks: [], datasets: { revenue: { rows: [{ month: "2026-10", month_label: "Oct 2026", service_line: "Training", revenue_aed: 1000 }] }, pipeline: { rows: [] }, hours: { rows: [{ department: "Sales", hours_available_oct_2026: 10, hours_utilized_oct_2026: 10, billable_hours_oct_2026: 10, utilisation_pct: 50 }] } }, workflowMaps: {} };
+  const ai = { async run(_model, payload) { const system = payload.messages[0].content; if (system.startsWith("Plan up to 5")) return { response: "[{\"tool\":\"query_dataset\",\"args\":{\"dataset\":\"revenue\"}},{\"tool\":\"make_chart\",\"args\":{\"type\":\"bar\"}},{\"tool\":\"analyze_revenue\"}]" };   return { response: "Revenue is AED 999999." }; } };
+  const seen = [];
+  const result = await runAgent(brain, "show revenue by service line", { ai, onStep: (step) => seen.push(step.tool) });
+  assert.equal(result.llm, "workers-ai");
+  assert.ok(seen.includes("plan") && seen.includes("query_dataset") && seen.includes("narrate"));
+  assert.equal(narrativeIsGrounded("Revenue is AED 999999.", [{ rows: [{ value: 1000 }] }]), false);
+  assert.doesNotMatch(result.answer, /999999/);
 });

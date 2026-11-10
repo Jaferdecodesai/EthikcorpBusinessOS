@@ -23,7 +23,7 @@ type Access = {
   pins?: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[] }[] }[];
   tasks?: { id: string; title: string; department: string; impactAed: number }[];
   automations?: { id: string; departmentId: string; name: string; enabled: boolean; impactAed?: number | null; runs: { at: string; note: string }[] }[];
-  workflowMaps?: Record<string, { flows: { title: string; weeklyHours: number; steps: string[] }[]; friction: string[]; proposals: { id: string; name: string; trigger: string; steps: string[]; schedule: string; hoursSavedPerMonth: number; formula: string; impactAed: number | null; aedFormula: string; revenueAngle: string; assumption: string }[] }>;
+  workflowMaps?: Record<string, { flows: { title: string; weeklyHours: number; steps: string[] }[]; friction: string[]; proposals: { id: string; name: string; trigger: string; steps: string[]; chain?: string; tools?: string[]; schedule: string; hoursSavedPerMonth: number; formula: string; impactAed: number | null; aedFormula: string; revenueAngle: string; assumption: string }[] }>;
   llm?: { provider: string; model: string | null; region: string; embedding: string; azure: { missing: string[] } };
 };
 
@@ -338,7 +338,8 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
       <div>
         <div className="eyebrow">Ethikcorp BusinessBrain</div>
         <h1>The company, in one view.</h1>
-        <p className="sub">Ask from indexed documents. {state.llm?.region || "Cloudflare Workers AI – not UAE-resident; UAE North option ready"} {state.llm?.provider === "workers-ai" ? state.llm.model : "Base model: not connected on this preview."}</p>
+        <p className="sub">Ask from indexed documents. {state.llm?.region || "Cloudflare Workers AI – not UAE-resident; UAE North option ready"}</p>
+        <span className="pill badge">{state.llm?.provider === "workers-ai" ? state.llm.model : "Model not connected"}</span>
       </div>
       <div className="greet-stat"><span className="sample-badge">SAMPLE DATA</span><b>{dash.company.netHoursPerWeek}</b><span>Sample net hours / week. Not measured.</span></div>
     </header>
@@ -348,8 +349,8 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
     <div className="bento">
       <article className="tile sky lift"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article>
       <article className="tile lime lift"><div className="l">Passages</div><div className="v">{state.chunks}</div></article>
-      <article className="tile sky lift"><div className="l">Demo tasks</div><div className="v">{dash.company.tasksDone}/{dash.company.tasksOpen}</div><div className="x">Sample snapshot</div></article>
-      <article className="tile coral lift"><div className="l">Model</div><div className="v" style={{ fontSize: 28 }}>Not connected</div></article>
+      <article className="tile sky lift"><div className="l">Sample rows</div><div className="v">{(state.datasets || []).reduce((sum, table) => sum + table.rows, 0)}</div><div className="x">Rows in the indexed sample tables.</div></article>
+      <article className="tile lime lift"><div className="l">Open sample tasks</div><div className="v">{dash.company.tasksOpen}</div><div className="x">{dash.company.tasksDone} done. Sample snapshot.</div></article>
       <section className="card band-card lift span2"><div className="card-band sky">Sample net hours</div><div className="pad"><BarList bold caption="Sample net hours per week from the setup model. Not measured." rows={hourRows} /></div></section>
       <section className="card band-card lift span2"><div className="card-band coral">Lead mix</div><div className="pad"><div className="mix">{dash.pipeline.map((item) => <div className={`mix-cell ${item.label.toLowerCase()}`} key={item.label}><b>{item.value}</b><span>{item.label}</span></div>)}</div><p className="note">{dash.pipelineNote}</p></div></section>
       <article className="tile lime lift span2"><div className="l">Illustrative week</div><TrendLine points={dash.trend} /><div className="x">{dash.trendNote}</div></article>
@@ -367,7 +368,7 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
 
 function OpportunityList({ items, reload, title }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void>; title: string }) {
   if (!items.length) return null;
-  return <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>{title}</h2><span className="sample-badge">SAMPLE DATA</span></div><div className="fixes">{items.slice(0, 4).map((item) => <article className="fix" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : `AED ${item.impactAed.toLocaleString("en-AE")}`}</div><p>{item.formula}</p><p className="note">{item.confidence} · {item.owner}</p><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</div></section>;
+  return <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>{title}</h2><span className="sample-badge">SAMPLE DATA</span></div><div className="fixes">{items.slice(0, 4).map((item) => <article className="fix" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : `AED ${item.impactAed.toLocaleString("en-AE")}`}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</div></section>;
 }
 
 function Bots({ hash, state, reload }: { hash: string; state: Access; reload: () => Promise<void> }) {
@@ -400,33 +401,65 @@ function BotDesk({ departmentId, state, reload }: { departmentId: string; state:
   const saved = (state.automations || []).filter((item) => item.departmentId === departmentId);
   const partners = state.departments.filter((item) => item.id !== departmentId);
   return <>
-    {map?.flows?.[0] && <section className="card pad"><div className="ch"><h2>Workflow map</h2>{map && <span className="sample-badge">SAMPLE DATA</span>}</div><div className="flow">{map.flows[0].steps.map((step, index) => <span key={step}>{step}<small>{map.flows[0].weeklyHours ? ` · ${Math.round(map.flows[0].weeklyHours / Math.max(1, map.flows[0].steps.length) * 10) / 10} h/week` : ""}</small></span>)}</div>{map.friction?.length > 0 && <div className="ch"><h2>Bottlenecks</h2></div>}{map.friction?.map((item) => <p key={item}>{item}</p>)}</section>}
-    {map?.proposals?.length ? <section className="card pad"><div className="ch"><h2>Proposed automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{map.proposals.map((item) => <article className="fix" key={item.id}><h3>{item.name}</h3><p>{item.trigger}</p><p className="note">{item.formula}. {item.assumption}. {item.hoursSavedPerMonth} hours / month. {item.impactAed == null ? item.aedFormula : `AED ${item.impactAed.toLocaleString("en-AE")}. ${item.aedFormula}`}</p><p>{item.revenueAngle}</p>{state.role === "dev" && <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation", item); await reload(); }}>Build automation</button>}</article>)}</section> : <p className="note">Ingest the demo sources to load this department’s workflow file.</p>}
+    {map?.flows?.length ? <section className="card pad"><div className="ch"><h2>Workflow map</h2><span className="sample-badge">SAMPLE DATA</span></div>{map.flows.map((flow) => <div key={flow.title}><h3>{flow.title}</h3><ol className="wmap">{flow.steps.map((step, index) => { const hot = isBottleneck(step, map.friction || []); const hours = flow.weeklyHours ? Math.round(flow.weeklyHours / Math.max(1, flow.steps.length) * 10) / 10 : 0; return <li key={step}><div className={hot ? "wnode hot" : index % 3 === 2 ? "wnode alt" : "wnode"} style={{ animationDelay: `${index * 70}ms` }}><b>{index + 1}</b><span>{step}</span><small>{hours} h/week</small>{hot && <em>Bottleneck</em>}</div>{index < flow.steps.length - 1 && <i className="wlink" aria-hidden="true" />}</li>; })}</ol></div>)}{map.friction?.length > 0 && <div className="ch"><h2>Bottlenecks</h2></div>}{map.friction?.map((item) => <p key={item}>{item}</p>)}</section> : null}
+    {map?.proposals?.length ? <section className="card pad"><div className="ch"><h2>Proposed automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{map.proposals.map((item) => <article className="fix" key={item.id}><h3>{item.name}</h3><p className="chain">{item.chain || item.trigger}</p><p className="note">Tools: {item.tools?.join(", ")}. {item.hoursSavedPerMonth} hours / month.</p><div className="impact">{item.impactAed == null ? "—" : `AED ${item.impactAed.toLocaleString("en-AE")}`}</div><p>{item.revenueAngle}</p><details className="how"><summary>How we calculated</summary><p>{item.assumption}. {item.formula}. {item.aedFormula}</p></details>{state.role === "dev" && <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation", item); await reload(); }}>Build automation</button>}</article>)}</section> : <p className="note">Ingest the demo sources to load this department’s workflow file.</p>}
     {saved.length > 0 && <section className="card pad"><div className="ch"><h2>Automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{saved.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.impactAed ? `AED ${item.impactAed.toLocaleString("en-AE")}. ` : ""}{item.runs.map((run) => run.note).join(" ") || "No runs yet."}</small></span><span><button type="button" className="btn sm ghost" onClick={async () => { await api("/api/brain/automation/toggle", { id: item.id }); await reload(); }}>{item.enabled ? "On" : "Off"}</button> <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation/run", { id: item.id }); await reload(); }}>Simulated run</button></span></div>)}</section>}
     <section className="card pad"><div className="ch"><h2>Partner departments</h2></div>{partners.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.confirmed ? "Confirmed" : "Not confirmed"}</small></span><span className={item.confirmed ? "state-chip done" : "state-chip wait"}>{item.confirmed ? "Live" : "Waiting"}</span></div>)}</section>
   </>;
 }
 
+function isBottleneck(step: string, friction: string[]) {
+  const words = friction.join(" ").toLowerCase().match(/[a-z]{7,}/g) || [];
+  const text = step.toLowerCase();
+  return words.some((word) => text.includes(word.slice(0, 7)));
+}
+
+const PROMPTS = ["Revenue by service line, last 6 months", "Deals at risk", "Department utilisation", "Where can we make AED 1M more?"];
+
 function ChatDock({ area = "brain", departmentId, onResult }: { area?: string; departmentId?: string; onResult?: (result: { chart?: NonNullable<Access["pins"]>[number]; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[]; answer?: string }) => void }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [lines, setLines] = useState<{ who: string; text: string; cite?: string }[]>([{ who: "BusinessBrain", text: "Ask about a document you indexed. I cite the passage or I say there is no match.", cite: "Prototype retrieval · no base model" }]);
-  async function ask(event: React.FormEvent) {
-    event.preventDefault();
-    const question = text.trim();
+  async function ask(event?: React.FormEvent, preset?: string) {
+    event?.preventDefault();
+    const question = (preset || text).trim();
     if (!question) return;
     setText("");
     setOpen(true);
     setLines((prev) => [...prev, { who: "You", text: question }]);
+    const steps: { tool: string; detail: string }[] = [];
     try {
-      const result = await api("/api/brain/ask", { question, area, departmentId });
-      onResult?.(result);
-      const trace = result.steps?.map((step: { tool: string; detail: string }) => `${step.tool}: ${step.detail}`).join(" ");
-      setLines((prev) => [...prev, { who: "BusinessBrain", text: result.answer, cite: result.citations?.[0] ? `${result.citations[0].document}: ${result.citations[0].excerpt}` : trace }]);
+      const response = await fetch("/api/brain/ask", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/x-ndjson" }, body: JSON.stringify({ question, area, departmentId }) });
+      if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("ndjson")) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Request failed");
+        onResult?.(result);
+        setLines((prev) => [...prev, { who: "BusinessBrain", text: result.answer }]);
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const parts = buffer.split("\n");
+        buffer = parts.pop() || "";
+        for (const part of parts) {
+          if (!part.trim()) continue;
+          const event = JSON.parse(part);
+          if (event.type === "step") { steps.push(event.step); onResult?.({ steps: [...steps] }); }
+          if (event.type === "done") {
+            onResult?.({ ...event, steps });
+            setLines((prev) => [...prev, { who: "BusinessBrain", text: event.answer || event.error, cite: event.citations?.[0] ? `${event.citations[0].document}: ${event.citations[0].excerpt}` : undefined }]);
+          }
+        }
+      }
     } catch (reason) { setLines((prev) => [...prev, { who: "BusinessBrain", text: (reason as Error).message }]); }
   }
   return <>
     {open && <section className="card pad" aria-label="BusinessBrain transcript"><div className="log">{lines.map((line, index) => <div className="chatline" key={index}><b>{line.who}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div></section>}
-    <section className="chatdock" aria-label="BusinessBrain chat"><form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask BusinessBrain" /><button className="btn" type="submit">Ask</button></form></section>
+    <section className="chatdock" aria-label="BusinessBrain chat"><div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="btn ghost sm" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div><form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask BusinessBrain" /><button className="btn" type="submit">Ask</button></form></section>
   </>;
 }

@@ -15,31 +15,60 @@ export function BarList({ caption, rows, bold }: { caption: string; rows: { id: 
   </figure>;
 }
 
-export function LiveChart({ spec }: { spec: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[]; color?: number }[] } }) {
+type ChartSpec = { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; summary?: { total: number; change: number | null; best: { name: string; value: number } | null; worst: { name: string; value: number } | null }; series: { name: string; value?: number; values?: number[]; color?: number }[] };
+
+export function LiveChart({ spec }: { spec: ChartSpec }) {
   const [ready, setReady] = useState(false);
+  const [tip, setTip] = useState<{ label: string; rows: { name: string; value: number; color: string }[] } | null>(null);
   useEffect(() => { setReady(false); const frame = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(frame); }, [spec.id]);
-  const max = Math.max(1, ...spec.series.map((item) => item.value || Math.max(0, ...(item.values || []))));
-  return <figure className={`live-chart ${ready ? "ready" : ""}`} key={spec.id}>
+  const summary = spec.summary;
+  return <figure className={`live-chart hero-chart ${ready ? "ready" : ""}`} key={spec.id}>
     <figcaption>{spec.sample && <span className="sample-badge">SAMPLE DATA</span>} {spec.title}</figcaption>
-    {spec.type === "line" || spec.type === "area" ? <LineChart spec={spec} /> : null}
-    {spec.type === "donut" ? <Donut series={spec.series} /> : null}
-    {spec.type === "flow" ? <div className="flow">{spec.series.map((item, index) => <span key={item.name} style={{ animationDelay: `${index * 70}ms` }}>{item.name}</span>)} </div> : null}
-    {(spec.type === "bar" || spec.type === "funnel") && <div className="live-bars">{spec.series.map((item, index) => <div className="live-bar" key={item.name}><b>{item.name}</b><i><em style={{ width: ready ? `${Math.round(((item.value || 0) / max) * 100)}%` : "0%", background: CHART_COLORS[index % 3], transitionDelay: `${index * 60}ms` }} /></i><strong>{item.value}{spec.unit === "%" ? "%" : ""}</strong></div>)}</div>}
-    {spec.type === "kpi" && <div className="live-kpis">{spec.series.map((item) => <article key={item.name}><Count value={item.value || 0} /><small>{item.name}</small></article>)}</div>}
-    {spec.type === "table" && <table className="tbl"><tbody>{spec.series.map((item) => <tr key={item.name}><th>{item.name}</th><td>{item.value}</td></tr>)}</tbody></table>}
+    {summary && <div className="chart-kpis"><article className="tile sky"><span>Total</span><b><Count value={summary.total} /></b><small>{spec.unit || ""}</small></article><article className="tile lime"><span>Change</span><b>{summary.change == null ? "—" : `${summary.change > 0 ? "+" : ""}${summary.change}%`}</b><small>first to last period</small></article><article className="tile coral"><span>Best</span><b>{summary.best?.name || "—"}</b><small>{summary.best ? formatUnit(summary.best.value, spec.unit) : ""}</small></article><article className="tile sky"><span>Worst</span><b>{summary.worst?.name || "—"}</b><small>{summary.worst ? formatUnit(summary.worst.value, spec.unit) : ""}</small></article></div>}
+    <div className="chart-stage" onMouseLeave={() => setTip(null)}>
+      {spec.type === "line" || spec.type === "area" ? <LineChart spec={spec} onHover={setTip} /> : null}
+      {spec.type === "donut" ? <Donut series={spec.series} /> : null}
+      {(spec.type === "bar" || spec.type === "funnel") && <ColumnChart spec={spec} ready={ready} onHover={setTip} />}
+      {tip && <div className="chart-tip" role="status"><b>{tip.label}</b>{tip.rows.map((row) => <span key={row.name}><i style={{ background: row.color }} />{row.name} {formatUnit(row.value, spec.unit)}</span>)}</div>}
+    </div>
+    <ul className="legend">{spec.series.filter((item) => item.name).map((item, index) => <li key={item.name}><i style={{ background: CHART_COLORS[(item.color ?? index) % 3] }} />{item.name}</li>)}</ul>
   </figure>;
 }
 
-function LineChart({ spec }: { spec: { categories?: string[]; series: { name: string; values?: number[] }[] } }) {
-  const width = 640;
-  const height = 180;
+function formatUnit(value: number, unit?: string) {
+  if (unit === "%") return `${value}%`;
+  if (unit === "AED") return `AED ${Math.round(value).toLocaleString("en-AE")}`;
+  return Math.round(value).toLocaleString("en-AE");
+}
+
+function LineChart({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { label: string; rows: { name: string; value: number; color: string }[] } | null) => void }) {
+  const width = 760;
+  const height = 320;
+  const left = 56;
+  const right = 48;
+  const bottom = 36;
+  const safeId = spec.id.replace(/[^a-z0-9-]/gi, "");
   const categories = spec.categories || [];
   const max = Math.max(1, ...spec.series.flatMap((item) => item.values || []));
-  return <svg viewBox={`0 0 ${width} ${height}`} className="trend" role="img" aria-label={spec.series.map((item) => item.name).join(", ")}>{spec.series.map((item, index) => {
-    const values = item.values || [];
-    const d = values.map((value, point) => { const x = categories.length <= 1 ? width / 2 : (point / (categories.length - 1)) * (width - 24) + 12; const y = height - 18 - (value / max) * (height - 36); return `${point ? "L" : "M"}${x},${y}`; }).join(" ");
-    return <path key={item.name} d={d} fill="none" stroke={CHART_COLORS[index % 3]} strokeWidth="3" className="draw" />;
-  })}</svg>;
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const xAt = (point: number) => categories.length <= 1 ? left + (width - left - right) / 2 : left + (point / (categories.length - 1)) * (width - left - right);
+  const yAt = (value: number) => 16 + (1 - value / max) * (height - bottom - 16);
+  return <svg viewBox={`0 0 ${width} ${height}`} className="hero-plot" role="img" aria-label={spec.series.map((item) => item.name).join(", ")} onMouseMove={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); const ratio = (event.clientX - bounds.left) / bounds.width; const local = ratio * width; const index = categories.reduce((best, _, point) => Math.abs(xAt(point) - local) < Math.abs(xAt(best) - local) ? point : best, 0); onHover({ label: categories[index] || "", rows: spec.series.map((item, seriesIndex) => ({ name: item.name, value: item.values?.[index] || 0, color: CHART_COLORS[seriesIndex % 3] })) }); }}>
+    <defs>{CHART_COLORS.map((color, index) => <linearGradient id={`fill-${safeId}-${index}`} key={color} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.45" /><stop offset="100%" stopColor={color} stopOpacity="0.02" /></linearGradient>)}</defs>
+    {ticks.map((tick) => <g key={tick}><line x1={left} x2={width - 12} y1={yAt(max * tick)} y2={yAt(max * tick)} className="plot-grid" /><text x={left - 8} y={yAt(max * tick) + 4} textAnchor="end" className="axis">{Math.round(max * tick / (spec.unit === "AED" ? 1000 : 1))}{spec.unit === "AED" ? "k" : ""}</text></g>)}
+    {categories.map((category, index) => <text key={category} x={xAt(index)} y={height - 10} textAnchor="middle" className="axis">{category}</text>)}
+    {spec.series.map((item, index) => {
+      const values = item.values || [];
+      const line = values.map((value, point) => `${point ? "L" : "M"}${xAt(point)},${yAt(value)}`).join(" ");
+      const area = `${line} L${xAt(values.length - 1)},${yAt(0)} L${xAt(0)},${yAt(0)} Z`;
+      return <g key={item.name}><path d={area} fill={`url(#fill-${safeId}-${index % 3})`} /><path d={line} fill="none" stroke={CHART_COLORS[index % 3]} strokeWidth="4.5" className="draw" /></g>;
+    })}
+  </svg>;
+}
+
+function ColumnChart({ spec, ready, onHover }: { spec: ChartSpec; ready: boolean; onHover: (tip: { label: string; rows: { name: string; value: number; color: string }[] } | null) => void }) {
+  const max = Math.max(1, ...spec.series.map((item) => item.value || 0));
+  return <div className="columns" role="img" aria-label={spec.title}>{spec.series.map((item, index) => <button type="button" className="column" key={item.name} onMouseEnter={() => onHover({ label: item.name, rows: [{ name: item.name, value: item.value || 0, color: CHART_COLORS[index % 3] }] })} onFocus={() => onHover({ label: item.name, rows: [{ name: item.name, value: item.value || 0, color: CHART_COLORS[index % 3] }] })}><span style={{ height: ready ? `${Math.max(4, Math.round(((item.value || 0) / max) * 100))}%` : "0%", background: CHART_COLORS[index % 3], transitionDelay: `${index * 50}ms` }} /><b>{item.name}</b></button>)}</div>;
 }
 
 function Donut({ series }: { series: { name: string; value?: number }[] }) {

@@ -66,6 +66,14 @@ async function handleApi(req, res) {
       body.trustedRole = invite.role;
     }
     const role = brainState?.roles?.[localSession] || "customer";
+    const stream = url.pathname === "/api/brain/ask" && String(req.headers.accept || "").includes("application/x-ndjson");
+    if (stream) {
+      res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+      const result = await handleBrain(brainState, { method: req.method, pathname: url.pathname, body, role, sessionId: localSession, env: process.env, connectors: { github: Boolean(process.env.GITHUB_TOKEN), drive: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) }, onStep: (step) => res.write(`${JSON.stringify({ type: "step", step })}\n`) });
+      brainState = result.brain;
+      res.end(`${JSON.stringify({ type: "done", ...result.data })}\n`);
+      return;
+    }
     const result = await handleBrain(brainState, { method: req.method, pathname: url.pathname, body, role, sessionId: localSession, env: process.env, connectors: { github: Boolean(process.env.GITHUB_TOKEN), drive: Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) } });
     brainState = result.brain;
     if (result.signRole) {
