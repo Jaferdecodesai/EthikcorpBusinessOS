@@ -21,6 +21,108 @@ type Access = {
 
 const dash = ceoDashboard();
 
+const TONES = [
+  { bg: "#09A5EC", fg: "#03050A" },
+  { bg: "#FD7152", fg: "#03050A" },
+  { bg: "#D6FD21", fg: "#03050A" },
+  { bg: "#B70F16", fg: "#FFFFFF" },
+  { bg: "#3E494E", fg: "#FFFFFF" },
+  { bg: "#03050A", fg: "#D6FD21" },
+  { bg: "#202020", fg: "#FFFFFF" },
+  { bg: "#09A5EC", fg: "#03050A" },
+  { bg: "#FD7152", fg: "#03050A" }
+];
+
+const FACES: Record<string, { bg: string; fg: string; bar: string; ink: string }> = {
+  sales: { bg: "#09A5EC", fg: "#03050A", bar: "#09A5EC", ink: "#03050A" },
+  marketing: { bg: "#FD7152", fg: "#03050A", bar: "#FD7152", ink: "#03050A" },
+  delivery: { bg: "#D6FD21", fg: "#03050A", bar: "#D6FD21", ink: "#03050A" },
+  technology: { bg: "#03050A", fg: "#FFFFFF", bar: "#03050A", ink: "#D6FD21" },
+  finance: { bg: "#B70F16", fg: "#FFFFFF", bar: "#B70F16", ink: "#FFFFFF" },
+  hr: { bg: "#3E494E", fg: "#FFFFFF", bar: "#3E494E", ink: "#FFFFFF" },
+  operations: { bg: "#202020", fg: "#D6FD21", bar: "#202020", ink: "#D6FD21" },
+  "client-success": { bg: "#CACACA", fg: "#03050A", bar: "#CACACA", ink: "#03050A" },
+  legal: { bg: "#DDDED7", fg: "#03050A", bar: "#B70F16", ink: "#FFFFFF" }
+};
+
+function svgProps(size: number) {
+  return { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
+}
+
+function StageIcon({ id }: { id: string }) {
+  const p = svgProps(26);
+  if (id === "ownership") return <svg {...p}><path d="M8 3h8v4H8zM6 7h12v14H6zM9 12h6M9 16h4" /></svg>;
+  if (id === "intake") return <svg {...p}><path d="M12 4v10M8 10l4 4 4-4M5 19h14" /></svg>;
+  if (id === "parse") return <svg {...p}><path d="M6 4h9l3 3v13H6zM15 4v3h3M8 12h8M8 16h5" /></svg>;
+  if (id === "clean") return <svg {...p}><path d="M5 19l4-10 3 6 2-3 5 7" /></svg>;
+  if (id === "chunk") return <svg {...p}><path d="M4 7h6v10H4zM14 7h6v4h-6zM14 14h6v3h-6z" /></svg>;
+  if (id === "embed") return <svg {...p}><circle cx="8" cy="9" r="2" /><circle cx="16" cy="8" r="2" /><circle cx="12" cy="16" r="2" /><path d="M10 10l2 4M14 10l-2 4" /></svg>;
+  if (id === "index") return <svg {...p}><path d="M5 5h14v14H5zM5 10h14M10 10v9" /></svg>;
+  if (id === "rag") return <svg {...p}><circle cx="11" cy="11" r="6" /><path d="M16 16l3 3" /></svg>;
+  return <svg {...p}><path d="M12 3l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6z" /></svg>;
+}
+
+function DeptIcon({ id }: { id: string }) {
+  const p = svgProps(42);
+  if (id === "sales") return <svg {...p}><path d="M5 17l6-6 3 3 5-7" /><path d="M14 7h5v5" /></svg>;
+  if (id === "marketing") return <svg {...p}><path d="M4 10v4l10 4V6L4 10zM14 9.5a4 4 0 0 1 0 5" /></svg>;
+  if (id === "delivery") return <svg {...p}><path d="M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8" /></svg>;
+  if (id === "technology") return <svg {...p}><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" /></svg>;
+  if (id === "finance") return <svg {...p}><circle cx="12" cy="12" r="8" /><path d="M12 7v10M9.5 9.5c.6-.8 1.4-1 2.5-1 1.4 0 2.5.7 2.5 2s-1 1.8-2.5 2-2.5.7-2.5 2 1.1 2 2.5 2c1.1 0 1.9-.3 2.5-1" /></svg>;
+  if (id === "hr") return <svg {...p}><circle cx="9" cy="9" r="3" /><circle cx="16" cy="10" r="2" /><path d="M4 19c.6-2.5 2.4-4 5-4s4.4 1.5 5 4M14 15c1.4-.4 2.6 0 3.5 1.2" /></svg>;
+  if (id === "operations") return <svg {...p}><path d="M4 8h10M4 16h6M14 8a2 2 0 1 0 4 0 2 2 0 0 0-4 0zM10 16a2 2 0 1 0 4 0 2 2 0 0 0-4 0z" /></svg>;
+  if (id === "client-success") return <svg {...p}><circle cx="12" cy="12" r="8" /><path d="M8 12l3 3 5-6" /></svg>;
+  return <svg {...p}><path d="M12 3l7 3v6c0 4.5-3 7-7 9-4-2-7-4.5-7-9V6z" /></svg>;
+}
+
+function Spark({ values, color }: { values: number[]; color: string }) {
+  const max = Math.max(0.01, ...values);
+  const width = 120;
+  const height = 48;
+  const points = values.map((value, index) => {
+    const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
+    const y = height - 4 - (value / max) * (height - 8);
+    return `${x},${y}`;
+  }).join(" ");
+  const area = `0,${height} ${points} ${width},${height}`;
+  return <svg className="spark" viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><polygon points={area} fill={color} opacity="0.16" /><polyline points={points} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" /></svg>;
+}
+
+function Ring({ percent }: { percent: number }) {
+  const radius = 68;
+  const turn = 2 * Math.PI * radius;
+  const done = (Math.min(100, Math.max(0, percent)) / 100) * turn;
+  return <div className="ring-wrap">
+    <svg viewBox="0 0 180 180" role="img" aria-label={`Build progress ${percent} percent`}>
+      <defs>
+        <linearGradient id="build-ring" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stopColor="#D6FD21" />
+          <stop offset="100%" stopColor="#09A5EC" />
+        </linearGradient>
+      </defs>
+      <circle cx="90" cy="90" r={radius} fill="none" stroke="url(#build-ring)" strokeOpacity="0.35" strokeWidth="14" />
+      <circle cx="90" cy="90" r={radius} fill="none" stroke="url(#build-ring)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${done} ${turn - done}`} transform="rotate(-90 90 90)" />
+    </svg>
+    <div className="ring-num">{percent}<small>%</small></div>
+  </div>;
+}
+
+function TrendLine({ points }: { points: { week: string; netHours: number }[] }) {
+  const max = Math.max(1, ...points.map((point) => point.netHours));
+  const width = 360;
+  const height = 120;
+  const coords = points.map((point, index) => {
+    const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * (width - 16) + 8;
+    const y = height - 18 - (point.netHours / max) * (height - 32);
+    return [x, y] as const;
+  });
+  const d = coords.map((pair, index) => `${index ? "L" : "M"}${pair[0]},${pair[1]}`).join(" ");
+  return <svg className="trend" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={points.map((point) => `${point.week} ${point.netHours}`).join(", ")}>
+    <path d={d} fill="none" stroke="#D6FD21" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
+    {coords.map((pair, index) => <circle key={points[index].week} cx={pair[0]} cy={pair[1]} r="4.5" fill="#09A5EC" />)}
+  </svg>;
+}
+
 async function api(path: string, body?: unknown) {
   const response = await fetch(path, { method: body ? "POST" : "GET", credentials: "same-origin", headers: body ? { "content-type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json().catch(() => ({}));
@@ -52,7 +154,7 @@ export function BusinessApp() {
   return <div className="portal">
     <aside className="side" aria-label="Ethikcorp BusinessOS">
       <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
-      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
+      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`}><i className={`navdot ${item.id}`} />{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it"><i className={`navdot ${item.id}`} />{item.label}</button>)}</nav>
       <div className="sidefoot">{state?.role === "dev" ? "Development team. All three areas are open." : "Customer view. Locked areas open from live build progress."}</div>
     </aside>
     <div className="maincol">
@@ -72,7 +174,30 @@ export function BusinessApp() {
 }
 
 function Locked({ percent, what }: { percent: number; what: string }) {
-  return <section className="card pad"><div className="eyebrow">Still building</div><h1>{what === "bots" ? "Businessbots is waiting for department confirmation" : "BusinessBrain is being built"}</h1><p className="v" style={{ font: "600 42px/1 var(--f)", color: "var(--ink)" }}>{percent}%</p><div className="meter" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div><p className="note">This percentage counts finished pipeline stages. It is not a forecast.</p></section>;
+  const bots = what === "bots";
+  return <div className="lock-stage">
+    <div className="lock-preview" aria-hidden="true">
+      <div className="bento">
+        <article className="tile sky"><div className="l">Indexed</div><div className="v">0</div></article>
+        <article className="tile lime"><div className="l">Passages</div><div className="v">0</div></article>
+        <article className="tile coral"><div className="l">Tasks</div><div className="v">66</div></article>
+        <article className="tile ink"><div className="l">Model</div><div className="v">—</div></article>
+        <article className="tile red span2"><div className="l">{bots ? "Departments" : "Hours"}</div><div className="v">{bots ? "9" : "25.2"}</div></article>
+        <article className="tile slate span2"><div className="l">Sample</div><div className="v">{percent}%</div></article>
+        <article className="tile coral"><div className="l">People</div><div className="v">27</div></article>
+        <article className="tile ink"><div className="l">Runs</div><div className="v">59</div></article>
+        <article className="tile lime span2"><div className="l">Automations</div><div className="v">19</div></article>
+      </div>
+    </div>
+    <section className="lock-card">
+      <div className="lock-badge">Locked</div>
+      <div className="eyebrow">Still building</div>
+      <h1>{bots ? "Businessbots is waiting for department confirmation" : "BusinessBrain is being built"}</h1>
+      <p className="ring-num" style={{ position: "static", justifyContent: "flex-start", color: "#03050a", margin: "12px 0 8px" }}>{percent}<small>%</small></p>
+      <div className="meter" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }} /></div>
+      <p className="note">This percentage counts finished pipeline stages. It is not a forecast.</p>
+    </section>
+  </div>;
 }
 
 function Project({ state, reload }: { state: Access; reload: () => Promise<void> }) {
@@ -85,26 +210,45 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
     setNotice("Speaking with this browser’s voice. No external speech service is used.");
   }
   return <>
-    <div className="vh"><div><div className="eyebrow">BusinessBrain Builder</div><h1>Build the company brain</h1><p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p></div><button type="button" className="btn" onClick={speak}>Speak status</button></div>
+    <section className="hero-build">
+      <div className="hero-copy">
+        <div className="eyebrow">BusinessBrain Builder</div>
+        <h1>Build the company brain</h1>
+        <p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p>
+        <button type="button" className="btn" onClick={speak}>Speak status</button>
+      </div>
+      <div className="hero-ring">
+        <Ring percent={state.percent} />
+        <p>This percentage counts finished pipeline stages. It is not a forecast.</p>
+      </div>
+    </section>
     {notice && <p className="note" role="status">{notice}</p>}
     <Outline state={state} />
     <Ownership reload={reload} />
     <Handoff reload={reload} />
-    <section className="card pad"><div className="ch"><h2>Where this prototype runs</h2></div><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p></section>
+    <section className="card band-card lift"><div className="card-band ink">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p></div></section>
     {state.role === "dev" && <DevTools state={state} reload={reload} />}
   </>;
 }
 
 function Outline({ state }: { state: Access }) {
-  return <section className="card pad" aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2></div>
-    {Object.entries(state.stages).map(([id, stage]) => <div className="plainrow" key={id}><span className="num">{stage.status === "done" ? "✓" : "·"}</span><span><b>{id}</b><small>{stage.detail}</small></span><span className="note">{stage.status === "done" ? "Done" : "Not started"}</span></div>)}
-    <div className="plainrow"><span /><span><b>Fine-tune</b><small>{state.finetune.detail}</small></span><span className="note">Not runnable here</span></div>
+  const stages = [...Object.entries(state.stages), ["finetune", { status: "held", detail: state.finetune.detail }] as const];
+  return <section aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2></div>
+    <div className="pipe">{stages.map(([id, stage], index) => {
+      const tone = TONES[index % TONES.length];
+      const label = id === "finetune" ? "Not runnable here" : stage.status === "done" ? "Done" : "Not started";
+      return <article className="pipe-card lift" key={id} style={{ background: tone.bg, color: tone.fg }}>
+        <div className="pipe-top"><StageIcon id={id} /><b>{id === "finetune" ? "Fine-tune" : id}</b></div>
+        <small>{stage.detail}</small>
+        <span className="pipe-status" style={{ background: tone.fg, color: tone.bg }}>{label}</span>
+      </article>;
+    })}</div>
   </section>;
 }
 
 function Ownership({ reload }: { reload: () => Promise<void> }) {
   const [message, setMessage] = useState("");
-  return <section className="card pad"><div className="ch"><h2>1. Source ownership</h2></div><p className="note">Upload the completed .xlsx. All 18 sources must be present. Row errors stay on screen and nothing is stored until the file is valid.</p>
+  return <section className="card band-card lift"><div className="card-band coral">1. Source ownership</div><div className="pad"><p className="note">Upload the completed .xlsx. All 18 sources must be present. Row errors stay on screen and nothing is stored until the file is valid.</p>
     <form className="stack" onSubmit={async (event) => {
       event.preventDefault();
       const file = new FormData(event.currentTarget).get("file");
@@ -120,14 +264,14 @@ function Ownership({ reload }: { reload: () => Promise<void> }) {
     </form>
     {message && <p role="status">{message}</p>}
     <p className="note">{SOURCES.length} catalogue sources, including {SOURCES.filter((source) => source.notForAi).map((source) => source.title).join(" and ")} marked not for AI.</p>
-  </section>;
+    </div></section>;
 }
 
 function Handoff({ reload }: { reload: () => Promise<void> }) {
   const [name, setName] = useState("services.md");
   const [text, setText] = useState("");
   const [message, setMessage] = useState("");
-  return <section className="card pad"><div className="ch"><h2>2. Document handoff</h2></div><p className="note">UTF-8 text or Markdown is parsed, cleaned, chunked, embedded, and indexed immediately. PDF and Office files are refused until a parser is connected.</p>
+  return <section className="card band-card lift"><div className="card-band sky">2. Document handoff</div><div className="pad"><p className="note">UTF-8 text or Markdown is parsed, cleaned, chunked, embedded, and indexed immediately. PDF and Office files are refused until a parser is connected.</p>
     <form className="stack" onSubmit={async (event) => {
       event.preventDefault();
       try { await api("/api/brain/documents", { name, text }); setMessage(`${name} is indexed.`); setText(""); await reload(); }
@@ -138,27 +282,51 @@ function Handoff({ reload }: { reload: () => Promise<void> }) {
       <button className="btn" type="submit">Index document</button>
     </form>
     {message && <p role="status">{message}</p>}
-  </section>;
+    </div></section>;
 }
 
 function DevTools({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [link, setLink] = useState("");
-  return <section className="card pad"><div className="ch"><h2>Development pipeline</h2></div>
+  return <section className="card band-card lift"><div className="card-band slate">Development pipeline</div><div className="pad">
     <p>Collection, cleaning, parsing, chunking, embedding, vectors, RAG, evaluation, and connectors are the stages above. Fine-tuning is listed and is not running.</p>
     <p className="note">GitHub: {state.connectors.github.ok ? "token present" : `missing ${state.connectors.github.missing?.join(", ")}`}. Drive: {state.connectors.drive.ok ? "OAuth present" : `missing ${state.connectors.drive.missing?.join(", ")}`}. No files are fetched from either until those credentials exist.</p>
     <button type="button" className="btn ghost" onClick={async () => { const result = await api("/api/brain/bootstrap-dev", {}); setLink(result.url || result.error || ""); }}>Issue the development invite</button>
     {link && <p className="note">Give this URL only to the development team. It is signed with the existing session secret.</p>}
     {link && <p><a href={link}>{link}</a></p>}
     <div className="ch"><h2>Confirm departments</h2></div>
-    {state.departments.map((department) => <div className="plainrow" key={department.id}><span /><span><b>{department.name}</b><small>{department.workflows.join(", ")}</small></span><button type="button" className="btn sm" disabled={department.confirmed} onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>{department.confirmed ? "Confirmed" : "Confirm"}</button></div>)}
-  </section>;
+    {state.departments.map((department) => <div className="plainrow" key={department.id}><span className="navdot" style={{ background: FACES[department.id]?.bg || "#09A5EC", width: 14, height: 14, boxShadow: "inset 0 0 0 1.5px #03050A" }} /><span><b>{department.name}</b><small>{department.workflows.join(", ")}</small></span><button type="button" className="btn sm" disabled={department.confirmed} onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>{department.confirmed ? "Confirmed" : "Confirm"}</button></div>)}
+    </div></section>;
 }
 
 function Brain({ state }: { state: Access }) {
+  const hourRows = dash.hourBars.map((row) => {
+    const face = FACES[row.id] || FACES.sales;
+    return { ...row, note: "estimate", color: face.bar, ink: face.ink };
+  });
   return <>
-    <div className="vh"><div><div className="eyebrow">Ethikcorp BusinessBrain</div><h1>Ask from indexed documents</h1><p className="sub">{dash.label}</p></div></div>
-    <div className="grid g4"><article className="card kpi pad"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article><article className="card kpi pad"><div className="l">Passages</div><div className="v">{state.chunks}</div></article><article className="card kpi pad"><div className="l">Demo tasks</div><div className="v">{dash.company.tasksDone}/{dash.company.tasksOpen}</div><div className="x">Sample snapshot</div></article><article className="card kpi pad"><div className="l">Model</div><div className="v" style={{ fontSize: 18 }}>Not connected</div></article></div>
-    <section className="card pad" style={{ marginTop: 16 }}><BarList caption="Sample net hours per week from the setup model. Not measured." rows={dash.hourBars.map((row) => ({ ...row, note: "estimate" }))} /></section>
+    <header className="greet">
+      <div>
+        <div className="eyebrow">Ethikcorp BusinessBrain</div>
+        <h1>The company, in one view.</h1>
+        <p className="sub">Ask from indexed documents. {dash.label}</p>
+      </div>
+      <div className="greet-stat"><b>{dash.company.netHoursPerWeek}</b><span>Sample net hours / week. Not measured.</span></div>
+    </header>
+    <div className="bento">
+      <article className="tile sky lift"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article>
+      <article className="tile lime lift"><div className="l">Passages</div><div className="v">{state.chunks}</div></article>
+      <article className="tile coral lift"><div className="l">Demo tasks</div><div className="v">{dash.company.tasksDone}/{dash.company.tasksOpen}</div><div className="x">Sample snapshot</div></article>
+      <article className="tile ink lift"><div className="l">Model</div><div className="v" style={{ fontSize: 28 }}>Not connected</div></article>
+      <section className="card band-card lift span2"><div className="card-band sky">Sample net hours</div><div className="pad"><BarList bold caption="Sample net hours per week from the setup model. Not measured." rows={hourRows} /></div></section>
+      <section className="card band-card lift span2"><div className="card-band coral">Lead mix</div><div className="pad"><div className="mix">{dash.pipeline.map((item) => <div className={`mix-cell ${item.label.toLowerCase()}`} key={item.label}><b>{item.value}</b><span>{item.label}</span></div>)}</div><p className="note">{dash.pipelineNote}</p></div></section>
+      <article className="tile ink lift span2"><div className="l">Illustrative week</div><TrendLine points={dash.trend} /><div className="x">{dash.trendNote}</div></article>
+      <article className="tile lime lift"><div className="l">Automations</div><div className="v">{dash.company.automations}</div><div className="x">Setup model. Not running.</div></article>
+      <article className="tile red lift"><div className="l">ClickUp</div><div className="v">{dash.company.clickupOpenTasks}</div><div className="x">Open tasks. Sample snapshot.</div></article>
+      <article className="tile sky lift"><div className="l">People</div><div className="v">{dash.company.employees}</div><div className="x">Demo snapshot.</div></article>
+      <article className="tile coral lift"><div className="l">Hours logged</div><div className="v">{dash.company.hoursLogged}</div><div className="x">Sample snapshot.</div></article>
+      <article className="tile slate lift"><div className="l">Demo hours saved</div><div className="v">{dash.company.hoursSavedDemo}</div><div className="x">Not measured.</div></article>
+      <article className="tile ink lift"><div className="l">Runs / week</div><div className="v">{dash.company.runsPerWeek}</div><div className="x">Sample model.</div></article>
+    </div>
     <ChatDock />
   </>;
 }
@@ -166,9 +334,20 @@ function Brain({ state }: { state: Access }) {
 function Bots({ hash, state, reload }: { hash: string; state: Access; reload: () => Promise<void> }) {
   const selected = hash.split("/")[1];
   const department = catalog.find((item) => item.id === selected);
-  if (!department) return <div className="grid g3">{catalog.map((item) => <a className="card pad" key={item.id} href={`#bots/${item.id}`} style={{ textDecoration: "none" }}><div className="l">{item.code}</div><h2 style={{ fontSize: 18 }}>{item.name}</h2><p className="note">{item.mandate}</p></a>)}</div>;
+  if (!department) return <div className="dept-grid">{catalog.map((item) => {
+    const face = FACES[item.id] || FACES.sales;
+    const sample = dash.departments.find((row) => row.id === item.id);
+    const hours = sample?.netHoursPerWeek ?? 0;
+    const spark = dash.trend.map((point) => point.netHours * (dash.company.netHoursPerWeek ? hours / dash.company.netHoursPerWeek : 0));
+    const sparkInk = ["#09A5EC", "#FD7152", "#D6FD21", "#CACACA", "#DDDED7"].includes(face.bar) ? "#03050A" : face.bar;
+    return <a className="dept-card lift" key={item.id} href={`#bots/${item.id}`}>
+      <div className="dept-face" style={{ background: face.bg, color: face.fg }}><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div><div className="dept-metric">{hours}</div><div className="dept-kicker">Sample net h/week</div></div></div>
+      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p><Spark values={spark} color={sparkInk} /></div>
+    </a>;
+  })}</div>;
+  const face = FACES[department.id] || FACES.sales;
   return <>
-    <div className="vh"><div><div className="eyebrow">{department.code}</div><h1>{department.name}</h1><p className="sub">{department.mandate}</p></div><a className="btn ghost" href="#bots">All departments</a></div>
+    <header className="dept-hero" style={{ background: face.bg, color: face.fg }}><div><div className="dept-kicker">{department.code}</div><h1>{department.name}</h1><p className="sub" style={{ color: "inherit" }}>{department.mandate}</p></div><a className="btn ghost" href="#bots">All departments</a></header>
     <section className="card pad"><div className="ch"><h2>Workflows</h2><span className="note">{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed by the development team" : "Not confirmed"}</span></div>
       {department.workflows.map((workflow) => <div className="plainrow" key={workflow.id}><span /><span><b>{workflow.name}</b><small>{workflow.description}</small></span><span className="note">Template · not running</span></div>)}
     </section>
