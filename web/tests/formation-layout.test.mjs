@@ -6,17 +6,19 @@ import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const main = readFileSync(path.join(root, "src/main.tsx"), "utf8");
+const product = readFileSync(path.join(root, "src/product.tsx"), "utf8");
 const css = readFileSync(path.join(root, "src/portal.css"), "utf8");
-const app = main.slice(main.indexOf("function App("), main.indexOf("function TemplateBanner("));
 
-test("formation default workspace does not mount the customer guide rail", () => {
-  assert.equal(app.includes("<GuideDock"), false);
+test("the portal shell does not mount the customer guide rail", () => {
+  assert.equal(main.includes("<GuideDock"), false);
+  assert.equal(product.includes("<GuideDock"), false);
   assert.doesNotMatch(css, /\.pm-grid\s*\{[^}]*340px/);
+  assert.match(main, /<ProductApp/);
 });
 
-test("formation stage cards use a balanced three-column group", () => {
-  assert.match(app, /className="stage-board"/);
-  assert.match(css, /\.stage-board\s*\{[^}]*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+test("the customer sidebar is the nine build steps", () => {
+  assert.match(product, /aria-label="Build steps"/);
+  assert.match(product, /STEPS\.map/);
 });
 
 test("status pills wrap onto their own row instead of covering the breadcrumb", () => {
