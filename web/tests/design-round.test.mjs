@@ -54,7 +54,7 @@ test("indexed targets mark utilisation below target and revenue on target for Ma
   assert.equal(byId.utilisation.status, "below-target");
   assert.equal(byId.pipeline.status, "on-target");
   assert.equal(byId["win-rate"].status, "on-target");
-  assert.equal(overview.charts.map((chart) => chart.type).join(","), "bar,column");
+  assert.equal(overview.charts.map((chart) => chart.type).join(","), "bar,donut,column");
   assert.ok(overview.charts.every((chart) => !["line", "area", "flow"].includes(chart.type)));
   const training = overview.charts[0].series.find((item) => item.name.startsWith("Corporate Training"));
   const leadership = overview.charts[0].series.find((item) => item.name.startsWith("Leadership"));

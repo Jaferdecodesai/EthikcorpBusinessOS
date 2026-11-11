@@ -92,16 +92,23 @@ export function analyzeRevenue(datasets) {
   const nonBillable = round(datasets.hours.rows.reduce((sum, row) => sum + Math.max(0, Number(row.hours_utilized_oct_2026) - Number(row.billable_hours_oct_2026)), 0));
   const capacity = rate == null ? null : round(nonBillable * rate);
   const opportunities = [
-    { id: "open-book", title: "Work the open book at the probabilities already in the file", impactAed: expected, formula: "sum(value_aed × win_probability_pct / 100) for Discovery, Qualification, Proposal and Negotiation", confidence: "Sample file probabilities", owner: "Sales & BD", sample: true },
-    { id: "at-risk", title: "Stay on deals below 40% probability", impactAed: risk, formula: "sum(value_aed × win_probability_pct / 100) where the stage is open and win_probability_pct < 40", confidence: "Sample file probabilities", owner: "Sales & BD", sample: true },
-    { id: "capacity", title: "Value the utilised hours that were not billable in October", impactAed: capacity, formula: "(sum(hours_utilized_oct_2026 − billable_hours_oct_2026)) × (sum(revenue_aed) / 12 / sum(billable_hours_oct_2026))", confidence: "One sample month of hours against trailing revenue", owner: "Operations", sample: true },
-    { id: "lost", title: "The closed-lost book is a ceiling, not a forecast", impactAed: lostTotal, formula: "sum(value_aed) where stage = Closed Lost", confidence: "Low. This is the lost total, not an expected recovery", owner: "Sales & BD", sample: true }
+    { id: "open-book", title: `Close weighted pipeline: ${compactAed(expected)}`, impactAed: expected, formula: "sum(value_aed × win_probability_pct / 100) for Discovery, Qualification, Proposal and Negotiation", confidence: "Sample file probabilities", owner: "Sales & BD", sample: true },
+    { id: "at-risk", title: "Rescue low-probability deals", impactAed: risk, formula: "sum(value_aed × win_probability_pct / 100) where the stage is open and win_probability_pct < 40", confidence: "Sample file probabilities", owner: "Sales & BD", sample: true },
+    { id: "capacity", title: "Convert unbilled hours to billable", impactAed: capacity, formula: "(sum(hours_utilized_oct_2026 − billable_hours_oct_2026)) × (sum(revenue_aed) / 12 / sum(billable_hours_oct_2026))", confidence: "One sample month of hours against trailing revenue", owner: "Operations", sample: true },
+    { id: "lost", title: "Win back closed-lost accounts", impactAed: lostTotal, formula: "sum(value_aed) where stage = Closed Lost", confidence: "Low. This is the lost total, not an expected recovery", owner: "Sales & BD", sample: true }
   ].filter((item) => item.impactAed != null);
   return { opportunities, rate: rate == null ? null : round(rate) };
 }
 
 function round(value) {
   return Math.round(value);
+}
+
+function compactAed(value) {
+  const abs = Math.abs(Number(value) || 0);
+  if (abs >= 1_000_000) return `AED ${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `AED ${Math.round(abs / 1000)}K`;
+  return `AED ${Math.round(abs).toLocaleString("en-AE")}`;
 }
 
 const ALLOWED_CHARTS = new Set(["bar", "column", "stacked_column", "grouped_bar", "donut", "pie", "kpi", "bullet"]);
@@ -251,10 +258,12 @@ function overviewCharts(model, rows, period, mode, actions) {
   const monthSeries = period.months.map((month) => {
     const value = Math.round(rows.filter((row) => row.month === month).reduce((sum, row) => sum + row.value, 0));
     const full = rows.find((row) => row.month === month)?.label || monthName(month);
-    return { name: full.slice(0, 3), value, belowTarget: monthTarget != null && value < monthTarget };
+    return { name: full.slice(0, 3), value, target: monthTarget, belowTarget: monthTarget != null && value < monthTarget };
   });
-  const lines = chartSpec("chart-revenue-lines", "bar", `Revenue by service line, ${period.label}`, "AED", lineSeries, 6);
-  const columns = { ...chartSpec("chart-revenue-months", "column", `Revenue by month, ${period.label}`, "AED", monthSeries, 6), target: monthTarget, targetLabel: monthTarget == null ? "" : "Target" };
+  const lines = chartSpec("chart-revenue-lines", "bar", `Revenue by service line, ${period.label}`, "AED", lineSeries, 8);
+  const columns = { ...chartSpec("chart-revenue-months", "column", `Revenue by month, ${period.label}`, "AED", monthSeries, 12), target: monthTarget, targetLabel: monthTarget == null ? "" : "Target" };
+  const slices = lineSeries.length > 5 ? [...lineSeries.slice(0, 5), { name: "Other", value: lineSeries.slice(5).reduce((sum, item) => sum + item.value, 0) }] : lineSeries.map((item) => ({ name: item.name, value: item.value }));
+  const mix = { ...chartSpec("chart-revenue-share", "donut", `Revenue mix, ${period.label}`, "AED", slices, 4), total: lineSeries.reduce((sum, item) => sum + item.value, 0) };
   if (mode === "utilisation") {
     const series = model.hours.map((row) => {
       const value = row.available ? Math.round((row.hours / row.available) * 1000) / 10 : 0;
@@ -266,11 +275,8 @@ function overviewCharts(model, rows, period, mode, actions) {
   if (mode === "pipeline") return [chartSpec("chart-pipeline", "bar", "Pipeline by stage", "AED", capCategories(model.stages.map((row) => ({ name: row.name, value: row.value, belowTarget: false })).sort((left, right) => right.value - left.value), 10), 12)];
   if (mode === "risk") return [chartSpec("chart-risk", "bar", "Open pipeline below 40% probability", "AED", model.risk.map((row) => ({ name: row.name, value: row.value, belowTarget: false })), 12)];
   if (mode === "actions") return [chartSpec("chart-actions", "bar", "Revenue actions", "AED", actions.slice(0, 5).map((item) => ({ name: item.title, value: item.impactAed || 0, belowTarget: false })), 12)];
-  if (mode === "donut") {
-    const slices = lineSeries.length > 5 ? [...lineSeries.slice(0, 5), { name: "Other", value: lineSeries.slice(5).reduce((sum, item) => sum + item.value, 0), belowTarget: false }] : lineSeries;
-    return [{ ...chartSpec("chart-revenue-share", "donut", `Share of revenue, ${period.label}`, "AED", slices, 6), total: lineSeries.reduce((sum, item) => sum + item.value, 0) }, columns];
-  }
-  return [lines, columns];
+  if (mode === "donut") return [mix, columns];
+  return [lines, mix, columns];
 }
 
 function chartSpec(id, type, title, unit, series, span) {

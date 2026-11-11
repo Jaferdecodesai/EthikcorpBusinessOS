@@ -98,7 +98,12 @@ export function BusinessApp() {
   const [error, setError] = useState("");
   const [navOpen, setNavOpen] = useState(false);
   const [ceoView, setCeoView] = useState(true);
-  const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("bos-chat") !== "rail");
+  const [chatOpen, setChatOpen] = useState(() => {
+    const stored = localStorage.getItem("bos-chat");
+    if (stored === "rail") return false;
+    if (stored === "open") return true;
+    return !window.matchMedia("(max-width: 767px)").matches;
+  });
   function toggleChat() {
     setChatOpen((value) => {
       localStorage.setItem("bos-chat", value ? "rail" : "open");
@@ -123,11 +128,11 @@ export function BusinessApp() {
   const current = state?.tabs.find((item) => item.id === tab);
   const allowed = !current || current.enabled;
   const pageName = tab === "brain" ? "Business overview" : tab === "bots" ? "Businessbots" : "BusinessBrain Builder";
-  return <div className={`portal ${chatOpen ? "chat-open" : "chat-rail"} ${navOpen ? "nav-open" : ""}`}>
+  return <div className={`portal ${chatOpen ? "chat-open" : "chat-collapsed"} ${navOpen ? "nav-open" : ""}`}>
     {navOpen && <button type="button" className="nav-scrim" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
     <aside className="side" aria-label="Ethikcorp BusinessOS">
       <div className="side-stick">
-      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b></span></a>
+      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
       <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`} onClick={() => setNavOpen(false)}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
       <div className="sidefoot">{state?.role === "dev" ? "Development view. Answer traces stay in the chat." : "CEO view. Locked areas open from live build progress."}</div>
       </div>
@@ -153,8 +158,8 @@ export function BusinessApp() {
         {allowed && tab === "brain" && state && <Brain state={state} reload={reload} />}
         {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
       </div>
+      <ChatDock open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && !ceoView ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={raw.startsWith("bots/") ? raw.split("/")[1] : undefined} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />
     </div>
-    <ChatDock open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && !ceoView ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={raw.startsWith("bots/") ? raw.split("/")[1] : undefined} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />
   </div>;
 }
 
@@ -508,15 +513,12 @@ type ChatLine = { who: string; text?: string; bullets?: { label: string; value: 
 function ChatDock({ open, onToggle, role, area, departmentId, onResult }: { open: boolean; onToggle: () => void; role: "customer" | "dev"; area: string; departmentId?: string; onResult: (result: Insight) => void }) {
   const [text, setText] = useState("");
   const [asking, setAsking] = useState(false);
-  const [sheet, setSheet] = useState(false);
   const [lines, setLines] = useState<ChatLine[]>([{ who: "BusinessBrain", text: "Ask a question about your business. Charts update with the answer." }]);
-  const showThread = open || sheet;
   async function ask(event?: React.FormEvent, preset?: string) {
     event?.preventDefault();
     const question = (preset || text).trim();
     if (!question || asking) return;
     setText("");
-    setSheet(true);
     if (!open) onToggle();
     setAsking(true);
     window.dispatchEvent(new CustomEvent("bos-pending", { detail: true }));
@@ -562,13 +564,8 @@ function ChatDock({ open, onToggle, role, area, departmentId, onResult }: { open
     const chartLabel = result.view ? filterLabel(result.view) : "";
     setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: result.bullets?.length ? undefined : result.answer, bullets: result.bullets, steps: role === "dev" ? steps : undefined, chartId: result.refused ? undefined : chartIdFor(result.view || "revenue"), chartLabel: result.refused ? undefined : chartLabel }));
   }
-  return <aside className={`chat-panel ${sheet ? "sheet-open" : ""}`} aria-label="BusinessBrain chat">
-    <header className="chat-head">
-      <b>BusinessBrain</b>
-      <button type="button" className="btn ghost sm" onClick={() => { setLines([{ who: "BusinessBrain", text: "Ask a question about your business. Charts update with the answer." }]); }}>New conversation</button>
-      <button type="button" className="btn ghost sm" aria-expanded={open} onClick={onToggle}>{open ? "Collapse" : "Ask BusinessBrain"}</button>
-    </header>
-    {showThread && <div className="chat-log">{lines.map((line, index) => <article className={line.who === "You" ? "bubble you" : "bubble"} key={index}>
+  return <aside className="chat-dock" aria-label="BusinessBrain chat">
+    {open && <div className="chat-log">{lines.map((line, index) => <article className={line.who === "You" ? "bubble you" : "bubble"} key={index}>
       {line.who !== "You" && <span className="avatar" aria-hidden="true">EC</span>}
       <div>
         {line.text === "Analysing…" ? <div className="skeleton lines" aria-live="polite"><span /><span /><span /><small>Analysing…</small></div> : null}
@@ -578,12 +575,14 @@ function ChatDock({ open, onToggle, role, area, departmentId, onResult }: { open
         {line.error && line.retry && <button type="button" className="btn ghost sm" onClick={() => ask(undefined, line.retry)}>Try again</button>}
         {role === "dev" && line.steps?.length ? <details className="trace"><summary>How this answer was produced</summary><ol>{line.steps.map((step, stepIndex) => <li key={stepIndex}><b>{step.tool}</b> {step.detail}</li>)}</ol></details> : null}
       </div>
-    </article>)}
-    {(lines.length <= 1 || lines[lines.length - 1]?.who === "BusinessBrain") && !asking && <div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="chip" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div>}
-    </div>}
-    <form className="ask" onSubmit={ask}>
-      <textarea aria-label="Question" rows={1} value={text} placeholder="Ask about revenue, pipeline or utilisation" onFocus={() => setSheet(true)} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} />
-      <button className="btn" type="submit" disabled={asking}>Ask</button>
-    </form>
+    </article>)}</div>}
+    <div className="chat-bar">
+      <div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="chip" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div>
+      <form className="ask" onSubmit={ask}>
+        <textarea aria-label="Question" rows={1} value={text} placeholder="Ask about revenue, pipeline or utilisation" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} />
+        <button className="btn" type="submit" disabled={asking}>Ask</button>
+        <button type="button" className="btn ghost" aria-expanded={open} onClick={onToggle}>{open ? "Collapse" : "Expand"}</button>
+      </form>
+    </div>
   </aside>;
 }
