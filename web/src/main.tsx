@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
+import "@fontsource/space-grotesk/latin-700.css";
 import "@fontsource/fraunces/latin-600.css";
 import "@fontsource/fira-sans/latin-400.css";
 import "@fontsource/fira-sans/latin-500.css";
@@ -21,9 +23,9 @@ function RootApp() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const update = () => setHash(window.location.hash); window.addEventListener("hashchange", update); return () => window.removeEventListener("hashchange", update); }, []);
   useEffect(() => {
-    document.title = "Ethikcorp BusinessLLM";
+    document.title = "Ethikcorp BusinessOS";
   }, [hash]);
-  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Ethikcorp BusinessLLM</h1><p>{sessionError || "Opening your workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
+  if (!sessionReady) return <main className="cloud-session-status" role={sessionError ? "alert" : "status"}><h1>Ethikcorp BusinessOS</h1><p>{sessionError || "Opening your workspace…"}</p>{sessionError && <button onClick={()=>location.reload()}>Try again</button>}</main>;
   return <BusinessApp />;
 }
 createRoot(document.getElementById("root")!).render(<React.StrictMode><RootApp /></React.StrictMode>);

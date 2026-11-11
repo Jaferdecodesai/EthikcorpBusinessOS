@@ -1,0 +1,344 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Business overview · Ethikcorp BusinessOS</title><style>/* ===== Tokens (mirror of redesign-spec.md §2) ===== */
+:root{
+ --font-sans:"Inter","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+ --font-mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+ --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--sp-8:32px;--sp-10:40px;--sp-12:48px;--sp-16:64px;
+ --r-sm:4px;--r-md:8px;--r-lg:12px;--r-pill:999px;
+ --bg-app:#F5F7F9;--surface:#FFFFFF;--surface-sunken:#F8FAFB;
+ --text-1:#1A1F24;--text-2:#5B6670;--text-3:#8A949E;
+ --border:#E3E7EB;--border-strong:#C3CBD3;--divider:#EEF1F4;--grid:#E6EAEE;--axis:#C3CBD3;
+ --primary:#0B5CAD;--primary-hover:#08467F;--focus:#1F5FBF;
+ --cat-1:#1F5FBF;--cat-2:#2B8A5A;--cat-3:#0E3A75;--cat-4:#14663F;--cat-5:#4C8DD6;--cat-other:#8A949E;
+ --good:#1E7B45;--good-bg:#E8F5EC;--info-bg:#E8F1FB;--below:#C25400;
+ --sb-w:240px;--sb-bg:#040509;--sb-title:#E9EBF1;--sb-sub:#949598;--sb-item:#5C5D63;--sb-active-bg:#49A2E6;--sb-active-text:#00254E;
+ --sb-logo-bg:#DDFB5D;--sb-logo-text:#0A0F00;--sb-divider:#101116;--sb-foot:#A0A2A6;--sb-marker:#DDFB5D;
+ --shadow-1:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+ --shadow-2:0 2px 4px rgba(16,24,40,.06),0 8px 16px rgba(16,24,40,.06);
+ --shadow-float:0 8px 24px rgba(16,24,40,.12),0 2px 6px rgba(16,24,40,.06);
+ --card-pad:24px;--kpi-pad:20px;--gutter:24px;--margin:32px;
+ --appbar-h:56px;--dock-h:64px;--dock-gap:16px;--dock-max:880px;
+ --ease:cubic-bezier(.2,0,0,1);--dur:250ms;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font-family:var(--font-sans);color:var(--text-1);background:var(--bg-app);font-size:14px;line-height:20px;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums lining-nums}
+button{font:inherit;cursor:pointer}
+.meta{font-size:12px;line-height:16px;color:var(--text-2)}
+.clamp1{display:block;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+/* ===== Sidebar: old design, kept ===== */
+.sb{position:fixed;inset:0 auto 0 0;width:var(--sb-w);background:var(--sb-bg);display:flex;flex-direction:column;z-index:30}
+.sb-brand{display:flex;align-items:center;gap:12px;padding:18px 12px 0 20px;height:66px}
+.sb-logo{width:30px;height:30px;border-radius:7px;background:var(--sb-logo-bg);color:var(--sb-logo-text);font:700 11px/30px var(--font-sans);text-align:center;flex:none}
+.sb-names{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sb-names b{color:var(--sb-title);font:700 13px/16px var(--font-sans);white-space:nowrap}
+.sb-names small{color:var(--sb-sub);font:400 10px/12px var(--font-mono);letter-spacing:.06em;white-space:nowrap}
+.sb-div{border:0;border-top:1px solid var(--sb-divider);margin:0 0 10px}
+.sb-nav{display:flex;flex-direction:column;gap:2px;padding:0 12px}
+.sb-nav a{position:relative;display:flex;align-items:center;height:34px;padding:0 11px;border-radius:7px;color:var(--sb-item);font:500 13px/16px var(--font-sans);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-nav a:hover{color:#8E9096}
+.sb-nav a.active{background:var(--sb-active-bg);color:var(--sb-active-text);font-weight:600}
+.sb-nav a.active::before{content:"";position:absolute;left:-12px;top:8px;width:2px;height:18px;background:var(--sb-marker)}
+.sb-foot{margin-top:auto;border-top:1px solid #131418;padding:16px 20px 18px;color:var(--sb-foot);font:400 11px/14px var(--font-sans)}
+/* ===== Workspace ===== */
+.ws{margin-left:var(--sb-w);min-height:100%}
+.appbar{position:sticky;top:0;z-index:20;height:var(--appbar-h);display:flex;align-items:center;gap:12px;padding:0 var(--margin);background:var(--surface);border-bottom:1px solid var(--border)}
+.menu-btn{display:none}
+.crumb{flex:1;min-width:0;display:flex;gap:8px;font-size:13px;line-height:20px;white-space:nowrap;overflow:hidden}
+.crumb-root{color:var(--text-2)}.crumb-sep{color:var(--text-3)}.crumb b{font-weight:600}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--text-1);color:#fff;font:600 10px/32px var(--font-sans);text-align:center}
+.page{max-width:1600px;margin:0 auto;padding:32px var(--margin) calc(var(--dock-h) + var(--dock-gap) + 32px)}
+.ph{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:16px}
+h1{font:600 28px/36px var(--font-sans);letter-spacing:-.01em}
+.sub{margin-top:4px;color:var(--text-2);font-size:14px;line-height:20px}
+.ph-ctrl{display:flex;align-items:center;gap:16px;flex:none}
+.sel{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-2)}
+.sel select{height:36px;padding:0 32px 0 12px;border:1px solid var(--border-strong);border-radius:var(--r-md);font:500 14px/20px var(--font-sans);color:var(--text-1);background:#fff}
+.banner{display:flex;align-items:center;gap:12px;height:40px;padding:0 8px 0 16px;border-radius:var(--r-md);background:var(--info-bg);font-size:13px;margin-bottom:24px}
+.banner span:nth-child(2){flex:1}
+.b-i{width:16px;height:16px;border-radius:50%;background:var(--primary);color:#fff;font:700 11px/16px var(--font-sans);text-align:center}
+/* grid */
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gutter);align-items:stretch}
+.c-3{grid-column:span 3}.c-4{grid-column:span 4}.c-6{grid-column:span 6}.c-8{grid-column:span 8}.c-12{grid-column:span 12}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-1);padding:var(--card-pad);display:flex;flex-direction:column;min-width:0;transition:box-shadow var(--dur) var(--ease),outline-color 1.5s}
+.card-h{display:flex;align-items:center;gap:8px;min-height:32px;margin-bottom:16px}
+.card-h h3{font:600 15px/22px var(--font-sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.card-h .meta{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.card-f{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto;padding-top:16px}
+.h-row2{min-height:520px}.h-row3{min-height:452px}
+/* badges + buttons */
+.badge{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 10px;border-radius:var(--r-pill);font:500 12px/16px var(--font-sans);white-space:nowrap;flex:none}
+.badge.sm{height:22px;padding:0 8px}
+.badge.neutral{background:var(--divider);color:#3D4751}.badge.success{background:var(--good-bg);color:var(--good)}.badge.below{background:var(--below);color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 16px;border-radius:var(--r-md);font:500 14px/20px var(--font-sans);border:1px solid transparent;white-space:nowrap}
+.btn.primary{background:var(--primary);color:#fff}.btn.primary:hover{background:var(--primary-hover)}
+.btn.secondary{background:#fff;border-color:var(--border-strong);color:var(--text-1)}
+.btn.tertiary{background:none;color:var(--primary);padding:0 8px;height:32px}
+.btn.icon{width:36px;padding:0;background:#fff;border-color:var(--border);color:var(--text-1)}
+.btn:focus-visible,.card:focus-visible,.chip:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* KPI */
+.kpi{padding:var(--kpi-pad);min-height:168px;gap:0}
+.kpi-top{display:flex;justify-content:space-between;align-items:center;gap:8px;height:24px}
+.kpi-l{font:600 13px/16px var(--font-sans);color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-v{font:600 32px/40px var(--font-sans);letter-spacing:-.01em;margin-top:12px;white-space:nowrap}
+.kpi-v small{font:500 16px/24px var(--font-sans);color:var(--text-2);letter-spacing:0}
+.kpi-d{font:500 12px/16px var(--font-sans);margin:4px 0 12px;color:var(--text-2)}.kpi-d.up{color:var(--good)}.kpi-d.below{color:var(--below)}
+.bullet{position:relative;height:6px;border-radius:3px;background:var(--divider);margin-top:auto}
+.bullet span{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--cat-1)}
+.kpi.is-below .bullet span{background:var(--below)}
+.bullet i{position:absolute;top:-3px;width:2px;height:12px;background:var(--text-1)}
+.kpi-f{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;min-height:22px}
+.kpi-t{font:400 12px/16px var(--font-sans);color:var(--text-2);white-space:nowrap}
+.info{width:16px;height:16px;border:1px solid var(--border-strong);border-radius:50%;font:600 10px/14px var(--font-sans);color:var(--text-2);text-align:center;flex:none}
+.kpi.is-below{box-shadow:inset 3px 0 0 var(--below),var(--shadow-1)}
+/* horizontal bars */
+.hb{display:flex;flex-direction:column;flex:1;--lab:220px;--valw:56px}
+.hb-axis{display:grid;grid-template-columns:var(--lab) 1fr;height:20px}
+.hb-grid-labels,.hb-gridlines{position:relative;margin-right:var(--valw)}
+.hb-grid-labels .gl{position:absolute;top:0}
+.hb-grid-labels .gl i{position:absolute;transform:translateX(-50%);font:400 12px/16px var(--font-sans);color:var(--text-2);font-style:normal;white-space:nowrap}
+.hb-grid-labels .gl:first-child i{transform:none}.hb-grid-labels .gl:last-child i{transform:translateX(-100%)}
+.hb-body{position:relative;flex:1;display:flex;flex-direction:column;justify-content:space-around}
+.hb-gridlines{position:absolute;top:0;bottom:0;left:var(--lab);right:0}
+.hb-gridlines .gl{position:absolute;top:0;bottom:0;width:1px;background:var(--grid)}.hb-gridlines .gl i{display:none}
+.hb-gridlines .gl:first-child{background:var(--axis)}
+.hb-row{position:relative;display:grid;grid-template-columns:var(--lab) 1fr;align-items:center;min-height:44px}
+.hb-label{padding-right:16px;font:400 13px/16px var(--font-sans);min-width:0}
+.hb-label .clamp1{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.below-txt{display:block;font:500 12px/16px var(--font-sans);color:var(--text-2);margin-top:2px}
+.hb-track{position:relative;height:20px;margin-right:var(--valw)}
+.hb-bar{height:100%;width:var(--w);border-radius:0 3px 3px 0;transition:width var(--dur) var(--ease)}
+.hb-val{position:absolute;top:0;left:calc(var(--w) + 8px);font:500 12px/20px var(--font-sans);white-space:nowrap}
+.hb.compact .hb-row{min-height:36px}.hb.compact .hb-track{height:16px}.hb.compact .hb-val{line-height:16px}
+.hb.compact .hb-row.u .hb-label{display:flex;align-items:baseline;gap:8px}.hb.compact .below-txt{margin:0;white-space:nowrap}
+.hb.compact .hb-val{left:auto;right:calc(-1*var(--valw));width:var(--valw);text-align:right}
+.tick{position:absolute;top:-4px;width:2px;height:24px;background:var(--text-1);transform:translateX(-1px)}
+/* column chart */
+.cc{flex:1;display:flex;padding-left:40px}
+.cc-plot{position:relative;flex:1;margin:24px 76px 28px 0}
+.yl{position:absolute;left:0;right:0;height:1px;background:var(--grid)}.yl:first-child{background:var(--axis)}
+.yl i{position:absolute;right:calc(100% + 8px);top:-8px;font:400 12px/16px var(--font-sans);color:var(--text-2);font-style:normal}
+.target{position:absolute;left:0;right:0;border-top:1.5px dashed var(--text-1);z-index:2}
+.target i{position:absolute;left:calc(100% + 8px);top:-9px;font:500 12px/16px var(--font-sans);font-style:normal;white-space:nowrap}
+.cols{position:absolute;inset:0;display:grid;grid-template-columns:repeat(6,1fr)}
+.col{position:relative;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.col-bar{width:56%;max-width:48px;height:var(--h);background:var(--cat-1);border-radius:3px 3px 0 0;transition:height var(--dur) var(--ease)}
+.col-val{font:500 12px/16px var(--font-sans);margin-bottom:6px}
+.col-x{position:absolute;bottom:-24px;font:400 12px/16px var(--font-sans);color:var(--text-2)}
+.col-flag{position:absolute;bottom:-40px;font:500 11px/14px var(--font-sans);color:var(--text-2);white-space:nowrap;display:none}
+.legend-inline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-left:8px}.sw.dash{height:0;width:16px;border-top:1.5px dashed var(--text-1);border-radius:0}
+/* donut */
+.donut-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:20px}
+.donut{position:relative;width:184px;height:184px;flex:none}
+.donut svg circle{transition:stroke-dasharray var(--dur) var(--ease),stroke-dashoffset var(--dur) var(--ease)}
+.donut-c{position:absolute;left:50%;top:50%;width:116px;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;text-align:center}
+.d-cur{font:500 12px/16px var(--font-sans);color:var(--text-2)}
+.d-val{font:600 24px/30px var(--font-sans);letter-spacing:-.01em;white-space:nowrap}
+.d-lab{font:400 11px/14px var(--font-sans);color:var(--text-2);white-space:nowrap}
+.legend{list-style:none;padding:0;width:100%;display:flex;flex-direction:column}
+.legend li{display:grid;grid-template-columns:10px minmax(0,1fr) 56px 40px;align-items:center;column-gap:10px;min-height:32px;border-top:1px solid var(--divider);font-size:13px;line-height:16px}
+.legend li.lh{min-height:24px;border-top:0;font:500 11px/14px var(--font-sans);color:var(--text-2)}
+.legend li i{width:10px;height:10px;border-radius:2px}
+.legend b,.legend em{text-align:right;font-style:normal;font-weight:500}.legend em{color:var(--text-2)}
+.legend li.lh b{font-weight:500}
+/* tables */
+.tcard{padding-bottom:16px}
+.tbl-wrap{margin:0 calc(-1*var(--card-pad));overflow:auto}
+.tbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px;line-height:16px}
+.tbl th{position:sticky;top:0;background:var(--surface-sunken);height:40px;padding:0 12px;text-align:left;font:600 12px/16px var(--font-sans);color:var(--text-2);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl td{height:48px;padding:0 12px;border-bottom:1px solid var(--divider);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbl th:first-child,.tbl td:first-child{padding-left:var(--card-pad)}.tbl th:last-child,.tbl td:last-child{padding-right:var(--card-pad)}
+.tbl .r{text-align:right}.tbl tbody tr:hover{background:#F5F8FC}
+.sort{color:var(--primary)}
+.tcard:first-of-type .tbl col{}
+.pag{padding-top:12px}.pg{display:flex;gap:8px}.pg .btn{height:32px;width:32px}.pg .btn:disabled{color:var(--text-3)}
+/* table col widths */
+.t-clients th:nth-child(1){width:52%}.t-clients th:nth-child(2){width:20%}.t-clients th:nth-child(3){width:28%}
+.t-pipe th:nth-child(1){width:32%}.t-pipe th:nth-child(2){width:18%}.t-pipe th:nth-child(3){width:18%}.t-pipe th:nth-child(4){width:12%}.t-pipe th:nth-child(5){width:20%}
+.tbl th,.tbl td{padding-left:8px!important;padding-right:8px!important}.tbl th:first-child,.tbl td:first-child{padding-left:var(--card-pad)!important}.tbl th:last-child,.tbl td:last-child{padding-right:var(--card-pad)!important}
+.t-pipe td:first-child .clamp1{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tbl td.two,.t-pipe td{height:56px}.cell2{display:flex;flex-direction:column;gap:2px;min-width:0}.cell2 small{font-size:12px;line-height:16px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bullet i{right:20%}
+/* section + fixes */
+.sec-h{display:flex;align-items:baseline;gap:12px;margin-top:16px}
+h2{font:600 20px/28px var(--font-sans)}
+.fix{gap:8px;min-height:188px}
+.fix-k{font:600 13px/16px var(--font-sans);color:var(--text-2)}
+.fix-v{font:600 24px/32px var(--font-sans)}.fix-v small{font:500 14px/20px var(--font-sans);color:var(--text-2)}
+.fix p{font-size:13px;line-height:18px;color:var(--text-2)}
+.fix .btn{margin-top:auto;align-self:flex-start;height:32px}
+/* chat dock */
+.dock{position:fixed;z-index:25;bottom:var(--dock-gap);left:calc(var(--sb-w) + var(--margin));right:var(--margin);max-width:var(--dock-max);margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-float)}
+@media(min-width:1024px){.dock{left:calc(var(--sb-w) + (100vw - var(--sb-w) - min(var(--dock-max),100vw - var(--sb-w) - 2*var(--margin)))/2);right:auto;width:min(var(--dock-max),calc(100vw - var(--sb-w) - 2*var(--margin)))}}
+.dock-chips{display:none;gap:8px;padding:12px 12px 0;flex-wrap:wrap}
+.dock:focus-within .dock-chips,.dock.show-chips .dock-chips{display:flex}
+.chip{height:32px;padding:0 12px;border:1px solid var(--border);border-radius:var(--r-pill);background:#fff;font:500 13px/16px var(--font-sans);color:var(--text-1);white-space:nowrap}
+.dock-bar{display:flex;align-items:center;gap:8px;padding:12px;height:var(--dock-h)}
+.dock-av{width:28px;height:28px;border-radius:7px;background:var(--sb-logo-bg);color:var(--sb-logo-text);font:700 10px/28px var(--font-sans);text-align:center;flex:none}
+.dock-bar input{flex:1;min-width:0;height:40px;border:1px solid var(--border-strong);border-radius:var(--r-md);padding:0 12px;font:400 14px/20px var(--font-sans)}
+.dock-bar .btn{height:40px}.dock-bar .btn.icon{width:40px}
+/* ===== Laptop 1280 ===== */
+@media (max-width:1359px){:root{--margin:24px;--gutter:20px}.hb{--lab:190px}.tcard.c-6{grid-column:span 12}}
+/* ===== Tablet ===== */
+@media (max-width:1023px){.c-3{grid-column:span 6}.c-4,.c-8,.c-6{grid-column:span 12}}
+/* ===== Mobile 390 ===== */
+@media (max-width:767px){
+ :root{--margin:16px;--gutter:12px;--card-pad:16px;--kpi-pad:16px;--dock-h:60px}
+ .sb{display:none}.ws{margin-left:0}
+ .appbar{padding:0 16px;gap:8px}.menu-btn{display:block;width:44px;height:44px;margin-left:-8px;border:0;background:none;font-size:20px}
+ .crumb-root,.crumb-sep{display:none}.appbar .badge{display:none}
+ .page{padding:20px 16px calc(var(--dock-h) + 8px + 24px + env(safe-area-inset-bottom))}
+ .ph{flex-direction:column;align-items:stretch;gap:12px}h1{font:600 24px/32px var(--font-sans)}
+ .ph-ctrl{flex-wrap:wrap;gap:8px 12px}
+ .banner{height:auto;padding:10px 8px 10px 12px;align-items:flex-start;font-size:12px;line-height:16px}
+ .grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .c-3{grid-column:span 2}.c-4,.c-6,.c-8,.c-12,.tcard.c-6{grid-column:span 4}.fix.c-3{grid-column:span 4}
+ .h-row2,.h-row3{min-height:0}
+ .kpi{min-height:180px}.kpi-v{font-size:22px;line-height:28px;margin-top:6px}.kpi-v small{font-size:13px}
+ .kpi-d{font-size:11px}.kpi-t{display:none}.bullet{margin-top:12px}.kpi-f{margin-top:10px}
+ .card-h{flex-wrap:wrap;row-gap:0}.card-h h3{flex:1 1 100%;white-space:normal}.card-h .meta{flex:1}
+ .hb{--lab:0px}.hb-axis{grid-template-columns:1fr}.hb-row{grid-template-columns:1fr;row-gap:6px;padding:6px 0}.hb-gridlines{left:0}
+ .hb-label{padding-right:0}.hb.compact .hb-row{min-height:0}
+ .cc{padding-left:36px}.cc-plot{min-height:220px}
+ .donut{width:168px;height:168px}.donut svg{width:168px;height:168px}.donut-c{width:104px}.d-val{font-size:22px;line-height:28px}
+ .hide-m{display:none}
+ .t-clients th:nth-child(1){width:42%}.t-clients th:nth-child(2){width:30%}.t-clients th:nth-child(3){width:28%}
+ .t-pipe th:nth-child(1){width:40%}.t-pipe th:nth-child(2){width:30%}.t-pipe th:nth-child(3){width:0;display:none}.t-pipe td:nth-child(3){display:none}.t-pipe th:nth-child(5){width:30%}
+ .cc-plot{margin-right:0}.target i{display:none}.sec-h{flex-direction:column;gap:2px}
+ .dock{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));border-radius:14px}
+ .dock-bar{padding:10px;gap:8px}.dock-bar input{height:40px}.dock-bar .btn.primary{padding:0 14px}
+ .chip{font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0ms!important;animation:none!important}}
+</style></head>
+<body>
+<aside class="sb" aria-label="Main navigation">
+ <div class="sb-brand"><span class="sb-logo">EC</span><span class="sb-names"><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></div>
+ <hr class="sb-div">
+ <nav class="sb-nav"><a href="#">BusinessBrain Builder</a><a href="#" class="active" aria-current="page">Ethikcorp BusinessBrain</a><a href="#">Ethikcorp Businessbots</a></nav>
+ <div class="sb-foot">Customer view. Locked areas open from live build progress.</div>
+</aside>
+<div class="ws">
+ <header class="appbar"><button class="menu-btn" aria-label="Open navigation">☰</button><nav class="crumb"><span class="crumb-root">Ethikcorp BusinessOS</span><span class="crumb-sep">/</span><b>Business overview</b></nav><span class="badge neutral">Prototype</span><span class="avatar" aria-label="CEO view">CEO</span></header>
+ <main class="page">
+  <div class="ph"><div><h1>Business overview</h1><p class="sub">Recognised revenue, pipeline, utilisation and win rate from the indexed sample tables.</p></div>
+   <div class="ph-ctrl"><label class="sel"><span>Period</span><select><option>May–Oct 2026</option></select></label><span class="meta">AED · Updated 11 Nov 2026, 11:30 (UTC+4)</span></div></div>
+  <div class="banner" role="status"><span class="b-i">i</span><span>Sample data — figures are illustrative until live sources are connected.</span><button class="btn tertiary">Dismiss</button></div>
+  <div class="grid">
+   <article class="card c-3 kpi " tabindex="0">
+  <div class="kpi-top"><span class="kpi-l">Revenue</span><span class="info" aria-label="Definition">i</span></div>
+  <div class="kpi-v num"><small>AED</small> 5.17M</div>
+  <div class="kpi-d up">▲ 22.6% vs May 2026</div>
+  <div class="bullet" aria-hidden="true"><span style="width:82.4%"></span><i></i></div>
+  <div class="kpi-f"><span class="kpi-t">Target AED 5.00M · 103%</span><span class="badge success sm">✓ On target</span></div></article><article class="card c-3 kpi is-below" tabindex="0">
+  <div class="kpi-top"><span class="kpi-l">Utilisation</span><span class="info" aria-label="Definition">i</span></div>
+  <div class="kpi-v num">77.3%</div>
+  <div class="kpi-d below">Oct 2026 · ▼ 2.7 pts vs target</div>
+  <div class="bullet" aria-hidden="true"><span style="width:77.6%"></span><i></i></div>
+  <div class="kpi-f"><span class="kpi-t">Target 80.0% · 97%</span><span class="badge below sm">▼ Below target</span></div></article><article class="card c-3 kpi " tabindex="0">
+  <div class="kpi-top"><span class="kpi-l">Weighted pipeline</span><span class="info" aria-label="Definition">i</span></div>
+  <div class="kpi-v num"><small>AED</small> 2.40M</div>
+  <div class="kpi-d neutral">8 open deals</div>
+  <div class="bullet" aria-hidden="true"><span style="width:87.2%"></span><i></i></div>
+  <div class="kpi-f"><span class="kpi-t">Target AED 2.20M · 109%</span><span class="badge success sm">✓ On target</span></div></article><article class="card c-3 kpi " tabindex="0">
+  <div class="kpi-top"><span class="kpi-l">Win rate</span><span class="info" aria-label="Definition">i</span></div>
+  <div class="kpi-v num">78.6%</div>
+  <div class="kpi-d neutral">TTM, closed deals</div>
+  <div class="bullet" aria-hidden="true"><span style="width:89.6%"></span><i></i></div>
+  <div class="kpi-f"><span class="kpi-t">Target 70.0% · 112%</span><span class="badge success sm">✓ On target</span></div></article>
+   <section class="card c-8 h-row2" aria-label="Revenue by service line, May to October 2026. Highest: Business Transformation Consulting AED 1.60M">
+ <header class="card-h"><h3>Revenue by service line</h3><span class="meta">May–Oct 2026 · AED</span><span class="badge neutral">Sample</span></header>
+ <div class="hb">
+  <div class="hb-axis"><div></div><div class="hb-grid-labels"><span class="gl" style="left:0.0%"><i>0</i></span><span class="gl" style="left:25.0%"><i>450K</i></span><span class="gl" style="left:50.0%"><i>900K</i></span><span class="gl" style="left:75.0%"><i>1.35M</i></span><span class="gl" style="left:100.0%"><i>1.80M</i></span></div></div>
+  <div class="hb-body"><div class="hb-gridlines"><span class="gl" style="left:0.0%"><i>0</i></span><span class="gl" style="left:25.0%"><i>450K</i></span><span class="gl" style="left:50.0%"><i>900K</i></span><span class="gl" style="left:75.0%"><i>1.35M</i></span><span class="gl" style="left:100.0%"><i>1.80M</i></span></div><div class="hb-row" title="Business Transformation Consulting: AED 1,604,000">
+  <div class="hb-label"><span class="clamp1">Business Transformation Consulting</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:89.11%;background:var(--cat-1)"></div><span class="hb-val num" style="--w:89.11%">1.60M</span></div>
+</div><div class="hb-row" title="AI-Enabled Business Transformation: AED 943,000">
+  <div class="hb-label"><span class="clamp1">AI-Enabled Business Transformation</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:52.39%;background:var(--cat-1)"></div><span class="hb-val num" style="--w:52.39%">943K</span></div>
+</div><div class="hb-row" title="Corporate Training Programs: AED 816,000">
+  <div class="hb-label"><span class="clamp1">Corporate Training Programs</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:45.33%;background:var(--cat-1)"></div><span class="hb-val num" style="--w:45.33%">816K</span></div>
+</div><div class="hb-row" title="AI Agents for Workflow Automation: AED 772,000">
+  <div class="hb-label"><span class="clamp1">AI Agents for Workflow Automation</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:42.89%;background:var(--cat-1)"></div><span class="hb-val num" style="--w:42.89%">772K</span></div>
+</div><div class="hb-row" title="Leadership Development &amp; Culture Transformation: AED 713,000">
+  <div class="hb-label"><span class="clamp1">Leadership Development &amp; Culture Transformation</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:39.61%;background:var(--cat-1)"></div><span class="hb-val num" style="--w:39.61%">713K</span></div>
+</div><div class="hb-row" title="Gamification in Learning &amp; Corporate Education: AED 322,000">
+  <div class="hb-label"><span class="clamp1">Gamification in Learning &amp; Corporate Education</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:17.89%;background:var(--cat-1)"></div><span class="hb-val num" style="--w:17.89%">322K</span></div>
+</div></div>
+ </div>
+ <footer class="card-f"><button class="btn tertiary">View as table</button><span class="meta">Sorted by revenue, highest first</span></footer>
+</section><section class="card c-4 h-row2" aria-label="Revenue mix, May to October 2026, total AED 5.17M">
+ <header class="card-h"><h3>Revenue mix</h3><span class="meta">May–Oct 2026</span><span class="badge neutral">Sample</span></header>
+ <div class="donut-wrap">
+  <div class="donut"><svg viewBox="0 0 200 200" width="184" height="184" role="img" aria-hidden="true"><circle r="81.0" cx="100" cy="100" fill="none" stroke="#1F5FBF" stroke-width="22" stroke-dasharray="155.90 508.94" stroke-dashoffset="0.00" transform="rotate(-90 100 100)"/><circle r="81.0" cx="100" cy="100" fill="none" stroke="#2B8A5A" stroke-width="22" stroke-dasharray="90.83 508.94" stroke-dashoffset="-157.90" transform="rotate(-90 100 100)"/><circle r="81.0" cx="100" cy="100" fill="none" stroke="#0E3A75" stroke-width="22" stroke-dasharray="78.33 508.94" stroke-dashoffset="-250.73" transform="rotate(-90 100 100)"/><circle r="81.0" cx="100" cy="100" fill="none" stroke="#14663F" stroke-width="22" stroke-dasharray="74.00 508.94" stroke-dashoffset="-331.06" transform="rotate(-90 100 100)"/><circle r="81.0" cx="100" cy="100" fill="none" stroke="#4C8DD6" stroke-width="22" stroke-dasharray="68.19 508.94" stroke-dashoffset="-407.05" transform="rotate(-90 100 100)"/><circle r="81.0" cx="100" cy="100" fill="none" stroke="#8A949E" stroke-width="22" stroke-dasharray="29.70 508.94" stroke-dashoffset="-477.24" transform="rotate(-90 100 100)"/></svg>
+   <div class="donut-c"><span class="d-cur">AED</span><span class="d-val num" data-fit>5.17M</span><span class="d-lab">Total revenue</span></div></div>
+  <ul class="legend"><li class="lh"><span></span><span>Service line</span><b>AED</b><em>Share</em></li><li><i style="background:#1F5FBF"></i><span class="clamp1" title="Business Transformation Consulting">Transformation Consulting</span><b class="num">1.60M</b><em class="num">31%</em></li><li><i style="background:#2B8A5A"></i><span class="clamp1" title="AI-Enabled Business Transformation">AI-Enabled Transformation</span><b class="num">943K</b><em class="num">18%</em></li><li><i style="background:#0E3A75"></i><span class="clamp1" title="Corporate Training Programs">Corporate Training</span><b class="num">816K</b><em class="num">16%</em></li><li><i style="background:#14663F"></i><span class="clamp1" title="AI Agents for Workflow Automation">AI Agents for Workflow</span><b class="num">772K</b><em class="num">15%</em></li><li><i style="background:#4C8DD6"></i><span class="clamp1" title="Leadership Development &amp; Culture Transformation">Leadership &amp; Culture</span><b class="num">713K</b><em class="num">14%</em></li><li><i style="background:#8A949E"></i><span class="clamp1" title="Other (Gamification in Learning)">Other</span><b class="num">322K</b><em class="num">6%</em></li></ul>
+ </div>
+</section>
+   <section class="card c-6 h-row3" aria-label="Monthly revenue May to October 2026 against monthly target AED 800K. July and August below target.">
+ <header class="card-h"><h3>Monthly revenue vs target</h3><span class="meta">AED · target AED 800K / month</span><span class="badge neutral">Sample</span></header>
+ <div class="cc"><div class="cc-plot"><span class="yl" style="bottom:0.0%"><i class="num">0</i></span><span class="yl" style="bottom:25.0%"><i class="num">300K</i></span><span class="yl" style="bottom:50.0%"><i class="num">600K</i></span><span class="yl" style="bottom:75.0%"><i class="num">900K</i></span><span class="yl" style="bottom:100.0%"><i class="num">1.20M</i></span><span class="target" style="bottom:66.66666666666666%"><i>Target<br>800K</i></span><div class="cols"><div class="col" title="May 2026: AED 840,000"><span class="col-val num">840K</span><div class="col-bar" style="--h:70.00%"></div><span class="col-x">May</span></div><div class="col" title="Jun 2026: AED 860,000"><span class="col-val num">860K</span><div class="col-bar" style="--h:71.67%"></div><span class="col-x">Jun</span></div><div class="col" title="Jul 2026: AED 780,000"><span class="col-val num">780K</span><div class="col-bar" style="--h:65.00%"></div><span class="col-x">Jul</span><span class="col-flag">▼ Below</span></div><div class="col" title="Aug 2026: AED 760,000"><span class="col-val num">760K</span><div class="col-bar" style="--h:63.33%"></div><span class="col-x">Aug</span><span class="col-flag">▼ Below</span></div><div class="col" title="Sep 2026: AED 900,000"><span class="col-val num">900K</span><div class="col-bar" style="--h:75.00%"></div><span class="col-x">Sep</span></div><div class="col" title="Oct 2026: AED 1,030,000"><span class="col-val num">1.03M</span><div class="col-bar" style="--h:85.83%"></div><span class="col-x">Oct</span></div></div></div></div>
+ <footer class="card-f"><button class="btn tertiary">View as table</button><span class="legend-inline"><i class="sw" style="background:var(--cat-1)"></i>Revenue <i class="sw dash"></i>Target AED 800K</span></footer>
+</section><section class="card c-6 h-row3" aria-label="Utilisation by department, October 2026">
+ <header class="card-h"><h3>Utilisation by department</h3><span class="meta">Oct 2026 · | = target</span><span class="badge neutral">Sample</span></header>
+ <div class="hb compact">
+  <div class="hb-axis"><div></div><div class="hb-grid-labels"><span class="gl" style="left:0%"><i>0%</i></span><span class="gl" style="left:25%"><i>25%</i></span><span class="gl" style="left:50%"><i>50%</i></span><span class="gl" style="left:75%"><i>75%</i></span><span class="gl" style="left:100%"><i>100%</i></span></div></div>
+  <div class="hb-body"><div class="hb-gridlines"><span class="gl" style="left:0%"><i>0%</i></span><span class="gl" style="left:25%"><i>25%</i></span><span class="gl" style="left:50%"><i>50%</i></span><span class="gl" style="left:75%"><i>75%</i></span><span class="gl" style="left:100%"><i>100%</i></span></div><div class="hb-row u" title="Consulting Delivery: 85.0% (target 80%)">
+  <div class="hb-label"><span class="clamp1">Consulting Delivery</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:85.0%;background:var(--cat-2)"></div><span class="tick" style="left:80%"></span><span class="hb-val num" style="--w:85.0%">85.0%</span></div>
+</div><div class="hb-row u" title="Technology &amp; AI: 80.0% (target 80%)">
+  <div class="hb-label"><span class="clamp1">Technology &amp; AI</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:80.0%;background:var(--cat-2)"></div><span class="tick" style="left:80%"></span><span class="hb-val num" style="--w:80.0%">80.0%</span></div>
+</div><div class="hb-row u" title="Client Success: 80.0% (target 80%)">
+  <div class="hb-label"><span class="clamp1">Client Success</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:80.0%;background:var(--cat-2)"></div><span class="tick" style="left:80%"></span><span class="hb-val num" style="--w:80.0%">80.0%</span></div>
+</div><div class="hb-row u" title="Sales &amp; BD: 75.0% (target 70%)">
+  <div class="hb-label"><span class="clamp1">Sales &amp; BD</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:75.0%;background:var(--cat-2)"></div><span class="tick" style="left:70%"></span><span class="hb-val num" style="--w:75.0%">75.0%</span></div>
+</div><div class="hb-row u" title="Marketing: 75.0% (target 80%)">
+  <div class="hb-label"><span class="clamp1">Marketing</span><span class="below-txt">▼ Below target</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:75.0%;background:var(--cat-2)"></div><span class="tick" style="left:80%"></span><span class="hb-val num" style="--w:75.0%">75.0%</span></div>
+</div><div class="hb-row u" title="Operations: 75.0% (target 80%)">
+  <div class="hb-label"><span class="clamp1">Operations</span><span class="below-txt">▼ Below target</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:75.0%;background:var(--cat-2)"></div><span class="tick" style="left:80%"></span><span class="hb-val num" style="--w:75.0%">75.0%</span></div>
+</div><div class="hb-row u" title="Finance: 70.0% (target 70%)">
+  <div class="hb-label"><span class="clamp1">Finance</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:70.0%;background:var(--cat-2)"></div><span class="tick" style="left:70%"></span><span class="hb-val num" style="--w:70.0%">70.0%</span></div>
+</div><div class="hb-row u" title="Legal &amp; Compliance: 70.0% (target 70%)">
+  <div class="hb-label"><span class="clamp1">Legal &amp; Compliance</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:70.0%;background:var(--cat-2)"></div><span class="tick" style="left:70%"></span><span class="hb-val num" style="--w:70.0%">70.0%</span></div>
+</div><div class="hb-row u" title="HR &amp; Talent: 65.0% (target 70%)">
+  <div class="hb-label"><span class="clamp1">HR &amp; Talent</span><span class="below-txt">▼ Below target</span></div>
+  <div class="hb-track"><div class="hb-bar" style="--w:65.0%;background:var(--cat-2)"></div><span class="tick" style="left:70%"></span><span class="hb-val num" style="--w:65.0%">65.0%</span></div>
+</div></div>
+ </div>
+</section>
+   <section class="card c-6 tcard" aria-label="Top clients by recognised revenue">
+ <header class="card-h"><h3>Top clients</h3><span class="meta">Recognised revenue, TTM · AED</span><span class="badge neutral">Sample</span></header>
+ <div class="tbl-wrap"><table class="tbl t-clients"><thead><tr><th>Client · service line</th><th>Status</th><th class="r" aria-sort="descending">Revenue <span class="sort">↓</span></th></tr></thead><tbody><tr><td class="two"><span class="cell2"><span class="clamp1">Amber Dune Retail LLC</span><small title="Business Transformation Consulting">Business Transformation Consulting</small></span></td><td><span class="badge success sm">Active</span></td><td class="r num">1,240,000</td></tr><tr><td class="two"><span class="cell2"><span class="clamp1">Northwind Family Holdings</span><small title="Business Transformation Consulting">Business Transformation Consulting</small></span></td><td><span class="badge success sm">Active</span></td><td class="r num">1,120,000</td></tr><tr><td class="two"><span class="cell2"><span class="clamp1">Falconcroft Financial Services</span><small title="AI-Enabled Business Transformation">AI-Enabled Business Transformation</small></span></td><td><span class="badge success sm">Active</span></td><td class="r num">980,000</td></tr><tr><td class="two"><span class="cell2"><span class="clamp1">Harborfig Logistics PJSC</span><small title="AI Agents for Workflow Automation">AI Agents for Workflow Automation</small></span></td><td><span class="badge success sm">Active</span></td><td class="r num">860,000</td></tr><tr><td class="two"><span class="cell2"><span class="clamp1">Red Dune Construction</span><small title="AI-Enabled Business Transformation">AI-Enabled Business Transformation</small></span></td><td><span class="badge success sm">Active</span></td><td class="r num">748,000</td></tr><tr><td class="two"><span class="cell2"><span class="clamp1">Mirage Gate Real Estate</span><small title="Leadership Development &amp; Culture Transformation">Leadership Development &amp; Culture Transformation</small></span></td><td><span class="badge neutral sm">Completed</span></td><td class="r num">740,000</td></tr><tr><td class="two"><span class="cell2"><span class="clamp1">Oasis Loom Manufacturing</span><small title="Business Transformation Consulting">Business Transformation Consulting</small></span></td><td><span class="badge success sm">Active</span></td><td class="r num">712,000</td></tr></tbody></table></div>
+ <footer class="card-f pag"><span class="meta">1–7 of 16</span><span class="pg"><button class="btn icon" aria-label="Previous page" disabled>‹</button><button class="btn icon" aria-label="Next page">›</button></span></footer>
+</section><section class="card c-6 tcard" aria-label="Open pipeline">
+ <header class="card-h"><h3>Open pipeline</h3><span class="meta">AED · weighted total 2,397,500</span><span class="badge neutral">Sample</span></header>
+ <div class="tbl-wrap"><table class="tbl t-pipe"><thead><tr><th>Client</th><th>Stage</th><th class="r">Value</th><th class="r hide-m">Prob.</th><th class="r" aria-sort="descending">Weighted <span class="sort">↓</span></th></tr></thead><tbody><tr><td><span class="clamp1">Cedar Orchard Family Office</span></td><td>Negotiation</td><td class="r num">1,480,000</td><td class="r num hide-m">65%</td><td class="r num">962,000</td></tr><tr><td><span class="clamp1">Lantern Bay Retail Group</span></td><td>Proposal</td><td class="r num">1,150,000</td><td class="r num hide-m">40%</td><td class="r num">460,000</td></tr><tr><td><span class="clamp1">Tidehaven Maritime</span></td><td>Proposal</td><td class="r num">920,000</td><td class="r num hide-m">45%</td><td class="r num">414,000</td></tr><tr><td><span class="clamp1">Saffron Court Hotels</span></td><td>Discovery</td><td class="r num">640,000</td><td class="r num hide-m">30%</td><td class="r num">192,000</td></tr><tr><td><span class="clamp1">Inkstone Manufacturing</span></td><td>Qualification</td><td class="r num">1,200,000</td><td class="r num hide-m">15%</td><td class="r num">180,000</td></tr><tr><td><span class="clamp1">Alabaster Health Clinics</span></td><td>Discovery</td><td class="r num">360,000</td><td class="r num hide-m">25%</td><td class="r num">90,000</td></tr><tr><td><span class="clamp1">Horizon Petal Ecommerce</span></td><td>Qualification</td><td class="r num">480,000</td><td class="r num hide-m">15%</td><td class="r num">72,000</td></tr></tbody></table></div>
+ <footer class="card-f pag"><span class="meta">1–7 of 8</span><span class="pg"><button class="btn icon" aria-label="Previous page" disabled>‹</button><button class="btn icon" aria-label="Next page">›</button></span></footer>
+</section>
+   <div class="c-12 sec-h"><h2>Where to find AED 1M more</h2><span class="meta">Revenue fixes from the indexed tables</span></div>
+   <article class="card c-3 fix"><span class="fix-k">Close weighted pipeline</span><span class="fix-v num"><small>AED</small> 2,397,500</span><p>8 open deals, probability-weighted.</p><button class="btn secondary">Review deals</button></article><article class="card c-3 fix"><span class="fix-k">Rescue low-probability deals</span><span class="fix-v num"><small>AED</small> 561,500</span><p>Deals below 40% win probability.</p><button class="btn secondary">See deals</button></article><article class="card c-3 fix"><span class="fix-k">Convert unbilled hours</span><span class="fix-v num"><small>AED</small> 816,080</span><p>October hours worked but not billed.</p><button class="btn secondary">Open timesheets</button></article><article class="card c-3 fix"><span class="fix-k">Win back closed-lost accounts</span><span class="fix-v num"><small>AED</small> 1,740,000</span><p>3 lost deals; a ceiling, not a forecast.</p><button class="btn secondary">View accounts</button></article>
+  </div>
+ </main>
+ <div class="dock" role="region" aria-label="Ask BusinessBrain">
+  <div class="dock-chips"><button class="chip">Revenue by service line, last 6 months</button><button class="chip">Department utilisation</button><button class="chip">Where can we make AED 1M more?</button></div>
+  <form class="dock-bar" onsubmit="return false"><span class="dock-av">EC</span><input aria-label="Ask about revenue, pipeline or utilisation" placeholder="Ask about revenue, pipeline or utilisation"><button class="btn primary">Ask</button><button class="btn icon" aria-label="Expand chat" type="button">⌃</button></form>
+ </div>
+</div>
+<script>
+// Donut centre fit rule: step font size down until text fits inner diameter minus 2x12px padding; abbreviate as last resort
+document.querySelectorAll('[data-fit]').forEach(el=>{const box=el.closest('.donut-c');const max=box.clientWidth;let s=parseFloat(getComputedStyle(el).fontSize);while(el.scrollWidth>max&&s>16){s-=2;el.style.fontSize=s+'px'}});
+</script>
+</body></html>

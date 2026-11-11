@@ -39,6 +39,15 @@ export function parseDocument(name, text) {
   return { ok: true, text: cleaned };
 }
 
+export function chunkMarkdown(name, text) {
+  const parts = String(text || "").split(/^(?=#{1,6} )/m).map((part) => part.trim()).filter(Boolean);
+  return (parts.length ? parts : [String(text || "")]).flatMap((part) => {
+    const heading = (part.match(/^#{1,6} +(.+)$/m) || [, "Document"])[1].trim();
+    const anchor = heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    return chunkText(part).map((body) => ({ text: body, heading, anchor, source: name }));
+  }).slice(0, 80);
+}
+
 export function chunkText(text) {
   const blocks = text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   const chunks = [];
@@ -65,7 +74,7 @@ export function answerFromChunks(question, chunks) {
   }
   return {
     answer: ranked[0].text,
-    citations: ranked.map((chunk) => ({ document: chunk.document, excerpt: chunk.text.slice(0, 280), score: Math.round(chunk.score * 1000) / 1000 })),
+    citations: ranked.map((chunk) => ({ document: chunk.document, heading: chunk.heading || "", anchor: chunk.anchor || "", excerpt: chunk.text.slice(0, 280), score: Math.round(chunk.score * 1000) / 1000 })),
     llm: "not_configured",
     retrieval: "prototype-hashing",
     note: "The cited passage is returned directly. No base model is connected on this Worker."
@@ -80,25 +89,34 @@ export function ingestDocument(brain, input) {
   const parsed = parseDocument(input.name, input.text);
   if (!parsed.ok) return { ok: false, error: parsed.error, brain };
   const id = `doc-${brain.documents.length + 1}-${Date.now()}`;
-  const pieces = chunkText(parsed.text).map((text, index) => ({ id: `${id}-${index}`, documentId: id, document: input.name, text, embedding: embed(text) }));
+  const rich = String(input.name || "").endsWith(".md") ? chunkMarkdown(input.name, parsed.text) : chunkText(parsed.text).map((body) => ({ text: body, heading: "", anchor: "", source: input.name }));
+  const pieces = rich.map((piece, index) => ({ id: `${id}-${index}`, documentId: id, document: input.name, heading: piece.heading, anchor: piece.anchor, source: piece.source, text: piece.text, embedding: embed(piece.text) }));
   const next = { ...brain, documents: [...brain.documents, { id, name: input.name, sourceId: input.sourceId || "", text: parsed.text }], chunks: [...brain.chunks, ...pieces] };
   const check = answerFromChunks(tokenize(parsed.text).slice(0, 6).join(" "), next.chunks);
   return { ok: true, brain: next, citationReady: check.citations.length > 0 };
 }
 
 export function stageReport(brain) {
-  const hasDoc = brain.documents.length > 0;
-  const hasChunk = brain.chunks.length > 0;
-  const rag = hasChunk && answerFromChunks(tokenize(brain.documents[0]?.text || "").slice(0, 6).join(" "), brain.chunks).citations.length > 0;
+  const documents = brain.documents || [];
+  const chunks = brain.chunks || [];
+  const hasDoc = documents.length > 0;
+  const hasChunk = chunks.length > 0;
+  const rag = hasChunk && answerFromChunks(tokenize(documents[0]?.text || "").slice(0, 6).join(" "), chunks).citations.length > 0;
+  const sha = String(brain.quality?.sha || brain.demo?.sha || "").slice(0, 12);
+  const shaNote = sha ? ` Commit ${sha}.` : "";
+  const tables = Object.entries(brain.datasets || {}).filter(([name]) => name !== "consistency");
+  const rowNote = tables.length ? ` Rows: ${tables.map(([name, table]) => `${name} ${table.rows?.length || 0}`).join(", ")}.` : "";
+  const demoReady = Boolean(brain.demoReady);
+  const ownershipDone = Boolean(brain.ownershipReady || demoReady);
   const stages = {
-    ownership: { status: brain.ownershipReady ? "done" : "not_started", detail: "18-source ownership workbook." },
-    intake: { status: hasDoc ? "done" : "not_started", detail: "UTF-8 document handoff." },
-    parse: { status: hasDoc ? "done" : "not_started", detail: "Plain text and Markdown only." },
-    clean: { status: hasDoc ? "done" : "not_started", detail: "Whitespace and blank lines." },
-    chunk: { status: hasChunk ? "done" : "not_started", detail: `${brain.chunks.length} passages.` },
-    embed: { status: hasChunk ? "done" : "not_started", detail: "Prototype hashing vectors, not a neural embedding model." },
-    index: { status: hasChunk ? "done" : "not_started", detail: "Vectors stored in this Worker's Durable Object SQLite." },
-    rag: { status: rag ? "done" : "not_started", detail: "Retrieval returns a citation. No base LLM is connected." }
+    ownership: { status: ownershipDone ? "done" : "not_started", detail: brain.ownershipReady ? "18-source ownership workbook imported." : demoReady ? `Demo corpus ingested.${shaNote} The ownership workbook does not block this sample.` : "18-source ownership workbook. It does not block the demo ingest." },
+    intake: { status: hasDoc ? "done" : "not_started", detail: hasDoc ? `${documents.length} documents received.${shaNote}` : "No documents received." },
+    parse: { status: hasDoc ? "done" : "not_started", detail: hasDoc ? `${documents.length} UTF-8 documents parsed.${rowNote}` : "Plain text and Markdown only." },
+    clean: { status: hasDoc ? "done" : "not_started", detail: hasDoc ? `${documents.length} documents cleaned of blank lines and null bytes.` : "Whitespace and blank lines." },
+    chunk: { status: hasChunk ? "done" : "not_started", detail: hasChunk ? `${chunks.length} passages, each with a source path and heading.` : "No passages yet." },
+    embed: { status: hasChunk ? "done" : "not_started", detail: hasChunk ? `${chunks.length} prototype vectors, ${DIMS} dimensions. Not a neural embedding model.` : "No vectors yet." },
+    index: { status: hasChunk ? "done" : "not_started", detail: hasChunk ? `${chunks.length} vectors indexed.${shaNote}` : "Vectors are stored in this Worker's Durable Object SQLite." },
+    rag: { status: rag ? "done" : "not_started", detail: rag ? `Citations resolve to ${chunks.length} passages. No base LLM is connected.` : "Retrieval has not returned a citation yet." }
   };
   const done = PIPELINE.filter((id) => stages[id].status === "done").length;
   return { stages, percent: Math.round((done / PIPELINE.length) * 100), brainReady: done === PIPELINE.length };
@@ -119,8 +137,8 @@ export function portalAccess(role, brain) {
   const botsReady = departments.every((department) => department.confirmed);
   const dev = role === "dev";
   const tabs = [
-    { id: "pm", label: "Brainbuilder PM", enabled: true },
-    { id: "brain", label: "Ethikcorp Businessbrain", enabled: dev || report.brainReady },
+    { id: "pm", label: "BusinessBrain Builder", enabled: true },
+    { id: "brain", label: "Ethikcorp BusinessBrain", enabled: dev || report.brainReady },
     { id: "bots", label: "Ethikcorp Businessbots", enabled: dev || botsReady }
   ];
   const order = !dev && report.brainReady && botsReady ? ["brain", "bots", "pm"] : ["pm", "brain", "bots"];
