@@ -97,18 +97,26 @@ export function ingestDocument(brain, input) {
 }
 
 export function stageReport(brain) {
-  const hasDoc = brain.documents.length > 0;
-  const hasChunk = brain.chunks.length > 0;
-  const rag = hasChunk && answerFromChunks(tokenize(brain.documents[0]?.text || "").slice(0, 6).join(" "), brain.chunks).citations.length > 0;
+  const documents = brain.documents || [];
+  const chunks = brain.chunks || [];
+  const hasDoc = documents.length > 0;
+  const hasChunk = chunks.length > 0;
+  const rag = hasChunk && answerFromChunks(tokenize(documents[0]?.text || "").slice(0, 6).join(" "), chunks).citations.length > 0;
+  const sha = String(brain.quality?.sha || brain.demo?.sha || "").slice(0, 12);
+  const shaNote = sha ? ` Commit ${sha}.` : "";
+  const tables = Object.entries(brain.datasets || {}).filter(([name]) => name !== "consistency");
+  const rowNote = tables.length ? ` Rows: ${tables.map(([name, table]) => `${name} ${table.rows?.length || 0}`).join(", ")}.` : "";
+  const demoReady = Boolean(brain.demoReady);
+  const ownershipDone = Boolean(brain.ownershipReady || demoReady);
   const stages = {
-    ownership: { status: brain.ownershipReady ? "done" : "not_started", detail: "18-source ownership workbook." },
-    intake: { status: hasDoc ? "done" : "not_started", detail: "UTF-8 document handoff." },
-    parse: { status: hasDoc ? "done" : "not_started", detail: "Plain text and Markdown only." },
-    clean: { status: hasDoc ? "done" : "not_started", detail: "Whitespace and blank lines." },
-    chunk: { status: hasChunk ? "done" : "not_started", detail: `${brain.chunks.length} passages.` },
-    embed: { status: hasChunk ? "done" : "not_started", detail: "Prototype hashing vectors, not a neural embedding model." },
-    index: { status: hasChunk ? "done" : "not_started", detail: "Vectors stored in this Worker's Durable Object SQLite." },
-    rag: { status: rag ? "done" : "not_started", detail: "Retrieval returns a citation. No base LLM is connected." }
+    ownership: { status: ownershipDone ? "done" : "not_started", detail: brain.ownershipReady ? "18-source ownership workbook imported." : demoReady ? `Demo corpus ingested.${shaNote} The ownership workbook does not block this sample.` : "18-source ownership workbook. It does not block the demo ingest." },
+    intake: { status: hasDoc ? "done" : "not_started", detail: hasDoc ? `${documents.length} documents received.${shaNote}` : "No documents received." },
+    parse: { status: hasDoc ? "done" : "not_started", detail: hasDoc ? `${documents.length} UTF-8 documents parsed.${rowNote}` : "Plain text and Markdown only." },
+    clean: { status: hasDoc ? "done" : "not_started", detail: hasDoc ? `${documents.length} documents cleaned of blank lines and null bytes.` : "Whitespace and blank lines." },
+    chunk: { status: hasChunk ? "done" : "not_started", detail: hasChunk ? `${chunks.length} passages, each with a source path and heading.` : "No passages yet." },
+    embed: { status: hasChunk ? "done" : "not_started", detail: hasChunk ? `${chunks.length} prototype vectors, ${DIMS} dimensions. Not a neural embedding model.` : "No vectors yet." },
+    index: { status: hasChunk ? "done" : "not_started", detail: hasChunk ? `${chunks.length} vectors indexed.${shaNote}` : "Vectors are stored in this Worker's Durable Object SQLite." },
+    rag: { status: rag ? "done" : "not_started", detail: rag ? `Citations resolve to ${chunks.length} passages. No base LLM is connected.` : "Retrieval has not returned a citation yet." }
   };
   const done = PIPELINE.filter((id) => stages[id].status === "done").length;
   return { stages, percent: Math.round((done / PIPELINE.length) * 100), brainReady: done === PIPELINE.length };

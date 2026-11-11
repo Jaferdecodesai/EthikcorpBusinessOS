@@ -18,9 +18,10 @@ type Access = {
   connectors: { github: { ok: boolean; missing?: string[] }; drive: { ok: boolean; missing?: string[] } };
   residency: { prototype: string; embedding: string; llm: string; production: string };
   finetune: { status: string; detail: string };
+  instruction?: { exported: boolean; pairs: number; validated: boolean; lora: string };
   indexLayer?: { retrieval?: string; semantic?: string };
   demo?: { github: string; driveUrl: string; sha?: string; needsReingest?: boolean; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
-  quality?: { sha: string; fetchedAt: string; files: Record<string, { path: string; source: string; driveId?: string; rows: number; pass: boolean; schema?: { name: string; type: string }[] }>; cross?: { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } };
+  quality?: { sha: string; fetchedAt: string; files: Record<string, { path: string; source: string; status?: string; reason?: string; driveId?: string; rows: number; passages?: number; pass: boolean; schema?: { name: string; type: string }[] }>; cross?: { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } };
   datasets?: { id: string; rows: number }[];
   model?: { ready: boolean; updated?: string; revenue: { month: string; label: string; line: string; value: number }[]; hours: { department: string; hours: number; available: number; billable: number }[]; stages: { name: string; value: number }[]; risk: { name: string; value: number }[]; winRate: number | null; winRateValue: number | null; weighted: number; targets: { metric: string; subject: string; value: number; unit: string; goodDirection: string }[] };
   opportunities?: { id: string; title: string; impactAed: number; formula: string; confidence: string; owner: string }[];
@@ -225,13 +226,13 @@ function Outline({ state }: { state: Access }) {
   const stages: [string, { status: string; detail: string }][] = [
     ["retrieval", { status: state.indexLayer?.retrieval === "built" ? "done" : "not_started", detail: state.indexLayer?.retrieval === "built" ? "Heading-anchored passages are in the retrieval index." : "No passages are indexed yet." }],
     ["semantic", { status: state.indexLayer?.semantic === "built" ? "done" : "not_started", detail: state.model?.targets?.length ? "Synonyms, service-line aliases, KPI definitions, and the sample kpi-targets file." : "Synonyms and KPI definitions are ready. Numeric targets appear after the sample kpi-targets file is indexed." }],
-    ["instruction", { status: "done", detail: "training/ethikcorp-businessos-instruct.jsonl is prepared for a later LoRA. No model has been fine-tuned." }],
+    ["instruction", { status: state.instruction?.validated ? "done" : "not_started", detail: state.instruction?.validated ? `${state.instruction.pairs} pairs exported from the indexed tables and checked against the question list.` : "Instruction pairs are exported after the sample tables are indexed." }],
     ...Object.entries(state.stages),
     ["finetune", { status: "held", detail: state.finetune.detail }]
   ];
-  return <section aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2></div>
+  return <section aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2><b>{state.percent}%</b></div>
     <div className="pipe">{stages.map(([id, stage]) => {
-      const label = id === "finetune" ? "Not runnable here" : id === "instruction" ? "Prepared, not trained" : stage.status === "done" ? "Done" : stage.status === "running" ? "Running" : "Not started";
+      const label = id === "finetune" ? (state.instruction?.validated ? "LoRA not executed" : "Not exported") : id === "instruction" ? (state.instruction?.validated ? "Exported" : "Not exported") : stage.status === "done" ? "Done" : stage.status === "running" ? "Running" : "Not started";
       return <article className={`pipe-card ${stageClass(id, stage.status)} lift`} key={id}>
         <div className="pipe-top"><StageIcon id={id} /><b>{id === "finetune" ? "Fine-tune" : id}</b></div>
         <small>{stage.detail}</small>
@@ -282,7 +283,7 @@ function DataQuality({ quality }: { quality: NonNullable<Access["quality"]> }) {
   return <div><h3>Data quality</h3><p className="note">Commit {quality.sha?.slice(0, 12) || "unknown"} · fetched {quality.fetchedAt}</p>
     <p className="note">Cross-check {quality.cross?.pass ? "passed" : "failed"}.</p>
     <ul>{quality.cross?.checks?.map((check) => <li key={check.name}>{check.pass ? "Passed" : "Failed"} · {check.detail}</li>)}</ul>
-    <ul>{files.filter((file) => file.rows).map((file) => <li key={file.path}>{file.pass ? "Passed" : "Failed"} · {file.path} · {file.rows} rows · {file.source}{file.driveId ? ` · Drive ${file.driveId}` : ""} · {file.schema?.map((column) => `${column.name}:${column.type}`).join(", ")}</li>)}</ul>
+    <ul>{files.map((file) => <li key={file.path}>{file.status || (file.pass ? "ingested" : "failed")} · {file.path}{file.rows ? ` · ${file.rows} rows` : ""}{file.passages ? ` · ${file.passages} passages` : ""} · {file.source}{file.driveId ? ` · Drive ${file.driveId}` : ""}{file.reason ? ` · ${file.reason}` : ""}{file.schema?.length ? ` · ${file.schema.map((column) => `${column.name}:${column.type}`).join(", ")}` : ""}</li>)}</ul>
   </div>;
 }
 

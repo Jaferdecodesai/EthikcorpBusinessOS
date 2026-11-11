@@ -6,6 +6,11 @@ import { DEMO_DRIVE, DEMO_GITHUB, demoPlan, ingestDemoFile } from "./demo-intake
 import { llmStatus } from "./llm/status.mjs";
 import { buildSemanticLayer } from "./semantic.mjs";
 
+function finetuneStatus(instruction) {
+  if (instruction?.validated) return { status: "not_executed", detail: `${instruction.pairs}-pair dataset exported and validated. The LoRA run has not been executed.` };
+  return { status: "not_executed", detail: "Instruction dataset has not been exported. The LoRA run has not been executed." };
+}
+
 export function publicBrain(brain, role, connectors, env = {}) {
   const current = brain || emptyBrain();
   const access = portalAccess(role, current);
@@ -16,11 +21,12 @@ export function publicBrain(brain, role, connectors, env = {}) {
     chunks: (current.chunks || []).length,
     connectors: connectorStatus(connectors),
     residency: residency(),
-    finetune: { status: "not_runnable_here", detail: "Instruction pairs can be written to training/ethikcorp-businessos-instruct.jsonl. No LoRA fine-tune has been run. Unsloth or Axolotl would run outside this Worker." },
-    indexLayer: { retrieval: (current.chunks || []).length ? "built" : "not_built", semantic: current.semantic?.status || "not_built", instructionDataset: "prepared for a later LoRA; not trained", finetune: "not_run" },
+    instruction: current.instruction || { exported: false, pairs: 0, validated: false, lora: "not_executed" },
+    finetune: finetuneStatus(current.instruction),
+    indexLayer: { retrieval: (current.chunks || []).length ? "built" : "not_built", semantic: current.semantic?.status || "not_built", instructionDataset: current.instruction?.validated ? `${current.instruction.pairs} pairs exported and validated; LoRA not executed` : "not_exported", finetune: "not_executed" },
     semantic: current.semantic || buildSemanticLayer(),
     quality: current.quality || null,
-    demo: { github: current.demo?.github || DEMO_GITHUB, driveUrl: current.demo?.driveUrl || DEMO_DRIVE, drive: current.demo?.drive || null, filesTotal: current.demo?.filesTotal || 0, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] },
+    demo: { github: current.demo?.github || DEMO_GITHUB, driveUrl: current.demo?.driveUrl || DEMO_DRIVE, sha: current.demo?.sha || current.quality?.sha || "", needsReingest: Boolean(current.demo?.needsReingest), drive: current.demo?.drive || null, filesTotal: current.demo?.filesTotal || 0, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] },
     datasets: Object.entries(current.datasets || {}).map(([id, table]) => ({ id, rows: table.rows?.length || 0, sample: true, pass: table.validation?.pass !== false })),
     model: { ...projectModel(current.datasets || {}), updated: current.quality?.fetchedAt || "" },
     opportunities: analysis.opportunities,
