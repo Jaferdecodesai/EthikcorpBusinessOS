@@ -570,9 +570,11 @@ h3, .ch h3, .fix h3 { font: 600 15px/22px var(--f); text-transform: none; }
 .kpi-tile.below { box-shadow: inset 3px 0 0 #c25400; }
 .donut-ring { position: relative; width: 184px; height: 184px; margin: 0 auto; }
 .donut { width: 184px; height: 184px; }
-.donut-centre { position: absolute; left: 50%; top: 50%; width: 116px; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; text-align: center; }
-.d-cur, .d-lab { color: #5b6670; font-size: 12px; line-height: 16px; }
-.d-val { font-weight: 600; letter-spacing: -.01em; line-height: 30px; }
+.donut-centre { position: absolute; left: 0; top: 0; width: 184px; height: 184px; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+.donut-centre .d-cur, .donut-centre .d-val, .donut-centre .d-lab { display: block; width: 116px; max-width: 116px; margin: 0; padding: 0; text-align: center; background: transparent; border-radius: 0; flex: none; }
+.d-cur, .d-lab { color: #5b6670; font: 500 12px/16px var(--f); }
+.d-lab { font-weight: 400; font-size: 11px; line-height: 14px; }
+.d-val { font: 600 24px/30px var(--f); letter-spacing: -.01em; font-variant-numeric: tabular-nums lining-nums; color: #1a1f24; }
 .d-lab { font-size: 11px; line-height: 14px; }
 .donut-block { width: 100%; min-width: 0; }
 .chart-card { min-width: 0; overflow: visible; }
