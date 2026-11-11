@@ -111,7 +111,7 @@ function Bars({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: stri
       const color = colorFor(row, index, false, spec.mark);
       const width = `${Math.max(0, Math.min(100, ((row.value || 0) / top) * 100))}%`;
       return <button type="button" className="hbar-row" data-flip={row.name} key={row.name} title={row.name} onMouseEnter={() => onHover({ title: row.name, lines: [formatFull(row.value || 0, spec.unit), row.belowTarget ? "Below target" : ""] })} onFocus={() => onHover({ title: row.name, lines: [formatFull(row.value || 0, spec.unit)] })}>
-        <span className="hbar-name"><span>{row.name}</span>{row.belowTarget && <em className="below-label">{row.statusLabel || "Below target"}</em>}</span>
+        <span className="hbar-name"><span>{row.name}</span><em className="below-label">{row.belowTarget ? (row.statusLabel || "▼ Below target") : ""}</em></span>
         <span className="hbar-plot"><span className="hbar-fill" style={{ width, background: color, transition: `width 250ms ${EASE}` }} /></span>
         <b>{formatCompact(row.value || 0, spec.unit)}</b>
       </button>;
@@ -134,23 +134,23 @@ function Columns({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: s
     for (let value = 0; value <= top + step / 10; value += step) ticks.push(Math.round(value));
     top = ticks[ticks.length - 1];
   }
+  const targetPct = spec.target != null ? Math.max(0, Math.min(100, (spec.target / top) * 100)) : 0;
   return <div className="vbar" role="img" aria-label={spec.aria || spec.title}>
     <div className="vbar-ticks" aria-hidden="true">{[...ticks].reverse().map((tick) => <span key={tick}>{tickLabel(tick)}</span>)}</div>
-    <div className="vbar-stage">
-      <div className="vbar-values">{categories.map((category, index) => <b key={category}>{tickLabel(values[index])}</b>)}</div>
-      <div className="vbar-tracks">
-        {spec.target != null && <div className="target-line" style={{ bottom: `${Math.max(0, Math.min(100, (spec.target / top) * 100))}%` }}><span>Target {formatCompact(spec.target, spec.unit)}</span></div>}
-        {categories.map((category, index) => {
-          const point = spec.series.find((item) => item.name === category);
-          const color = BLUE;
-          const height = `${Math.max(0, Math.min(100, (values[index] / top) * 100))}%`;
-          return <button type="button" className="vbar-col" key={category} title={formatFull(values[index], spec.unit)} onMouseEnter={() => onHover({ title: category, lines: [formatFull(values[index], spec.unit), point?.belowTarget ? "Below target" : "On target"] })} onFocus={() => onHover({ title: category, lines: [formatFull(values[index], spec.unit)] })}>
-            <i style={{ height, background: color, transition: `height 250ms ${EASE}` }} />
-          </button>;
-        })}
-      </div>
-      <div className="vbar-names">{categories.map((category) => <em key={category} title={category}>{category}</em>)}</div>
+    <div className="vbar-tracks">
+      {spec.target != null && <div className="target-line" style={{ bottom: `${targetPct}%` }} />}
+      {categories.map((category, index) => {
+        const point = spec.series.find((item) => item.name === category);
+        const color = BLUE;
+        const height = `${Math.max(0, Math.min(100, (values[index] / top) * 100))}%`;
+        return <button type="button" className="vbar-col" key={category} title={formatFull(values[index], spec.unit)} onMouseEnter={() => onHover({ title: category, lines: [formatFull(values[index], spec.unit), point?.belowTarget ? "Below target" : "On target"] })} onFocus={() => onHover({ title: category, lines: [formatFull(values[index], spec.unit)] })}>
+          <i style={{ height, background: color, transition: `height 250ms ${EASE}` }}><b>{tickLabel(values[index])}</b></i>
+        </button>;
+      })}
     </div>
+    <div className="vbar-names">{categories.map((category, index) => <em key={category} title={category}><span>{category}</span><span className="col-foot">{tickLabel(values[index])}</span></em>)}</div>
+    {spec.target != null && <div className="target-rail" aria-hidden="true"><span className="target-tag" style={{ bottom: `${targetPct}%` }}>Target {formatCompact(spec.target, spec.unit)}</span></div>}
+    {spec.target != null && <p className="target-note">Target {formatCompact(spec.target, spec.unit)}</p>}
   </div>;
 }
 
@@ -202,7 +202,7 @@ function Donut({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: str
     </div>
     <table className="legend-table">
       <thead><tr><th /><th>Service line</th><th>AED</th><th>Share</th></tr></thead>
-      <tbody>{series.map((item, index) => <tr key={item.name} title={item.name} onMouseEnter={() => onHover({ title: item.name, lines: [formatFull(item.value || 0, spec.unit), `${Math.round(((item.value || 0) / total) * 100)}% of total`] })}><td><i style={{ background: colorFor(item, index, true) }} /></td><td>{item.shortName || SHORT[item.name] || item.name}</td><td className="num">{formatCompact(item.value || 0, spec.unit).replace(/^AED\s*/, "")}</td><td className="num">{Math.round(((item.value || 0) / total) * 100)}%</td></tr>)}</tbody>
+      <tbody>{series.map((item, index) => <tr key={item.name} onMouseEnter={() => onHover({ title: item.name, lines: [formatFull(item.value || 0, spec.unit), `${Math.round(((item.value || 0) / total) * 100)}% of total`] })}><td><i style={{ background: colorFor(item, index, true) }} /></td><td className="legend-name" title={item.name}>{item.name}</td><td className="num">{formatCompact(item.value || 0, spec.unit).replace(/^AED\s*/, "")}</td><td className="num">{Math.round(((item.value || 0) / total) * 100)}%</td></tr>)}</tbody>
     </table>
   </div>;
 }

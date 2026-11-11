@@ -48,7 +48,11 @@ export function axisTicks(max: number) {
 }
 
 export function tickLabel(value: number) {
-  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toLocaleString("en-AE", { maximumFractionDigits: 1 })}M`;
+  if (Math.abs(value) >= 1_000_000) {
+    const millions = Math.round(Math.abs(value) / 10_000) / 100;
+    const digits = Number.isInteger(millions) ? 0 : 2;
+    return `${value < 0 ? "−" : ""}${millions.toLocaleString("en-AE", { minimumFractionDigits: digits, maximumFractionDigits: digits })}M`;
+  }
   if (Math.abs(value) >= 1000) return `${Math.round(value / 1000).toLocaleString("en-AE")}K`;
   return String(Math.round(value));
 }
