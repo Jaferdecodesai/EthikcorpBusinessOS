@@ -43,7 +43,7 @@ export function proposeAutomations(map, datasets) {
       assumption: "40% of the weekly manual hours stated in the workflow file",
       impactAed,
       aedFormula: "hours_saved_per_month × (sum(revenue_aed) / 12 / sum(billable_hours_oct_2026))",
-      revenueAngle: "Turns saved specialist time toward billable delivery and faster follow-up.",
+      revenueAngle: concrete.benefit,
       sample: true
     };
   });
@@ -73,7 +73,13 @@ export function automationFromFlow(flow) {
   if (/invoice|ledger|vat/.test(blob)) tools.push("accounting ledger");
   if (!tools.length) tools.push("department checklist");
   const chain = [trigger, ...steps.slice(0, 4)].filter((item, index, list) => list.indexOf(item) === index).join(" → ");
-  return { trigger, steps, tools: tools.slice(0, 5), chain };
+  let benefit = `Saves specialist time on ${flow.title}.`;
+  if (/lead|form|whatsapp/.test(blob)) benefit = "Logs each lead once so follow-up starts the same day.";
+  else if (/invoice|billing|overdue/.test(blob)) benefit = "Issues the invoice sooner so cash is not waiting on a manual draft.";
+  else if (/content|blog|wordpress/.test(blob)) benefit = "Moves the draft forward so the campaign is not waiting on a blank page.";
+  else if (/proposal/.test(blob)) benefit = "Keeps the proposal version in one place so review is not stuck in email.";
+  else if (/pipeline|follow-up/.test(blob)) benefit = "Surfaces stale deals before the weekly review starts from scratch.";
+  return { trigger, steps, tools: tools.slice(0, 5), chain, benefit };
 }
 
 function shorten(step) {

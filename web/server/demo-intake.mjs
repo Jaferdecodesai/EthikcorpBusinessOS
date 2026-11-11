@@ -1,5 +1,6 @@
 import { parseCsv } from "./csv.mjs";
 import { ingestDocument } from "./brain-pipeline.mjs";
+import { KPI_TARGETS_CSV, KPI_TARGETS_PATH } from "./kpi-targets.mjs";
 import { crossCheck, validateTable } from "./quality.mjs";
 import { buildSemanticLayer } from "./semantic.mjs";
 import { WORKFLOW_FILES, parseWorkflow, proposeAutomations } from "./workflows.mjs";
@@ -14,7 +15,8 @@ const DATASETS = {
   "sample-data/monthly-revenue-by-service-line.csv": "revenue",
   "sample-data/sales-pipeline.csv": "pipeline",
   "sample-data/clients.csv": "clients",
-  "sample-data/department-headcount-and-hours.csv": "hours"
+  "sample-data/department-headcount-and-hours.csv": "hours",
+  [KPI_TARGETS_PATH]: "targets"
 };
 
 export function wantedPath(path) {
@@ -32,6 +34,7 @@ export async function demoPlan(fetchImpl = fetch) {
   if (!treeResponse.ok) throw new Error("The public GitHub demo repository could not be listed.");
   const tree = await treeResponse.json();
   const files = (tree.tree || []).filter((item) => item.type === "blob" && wantedPath(item.path)).map((item) => ({ path: item.path, size: item.size, sha: item.sha }));
+  if (!files.some((item) => item.path === KPI_TARGETS_PATH)) files.push({ path: KPI_TARGETS_PATH, size: KPI_TARGETS_CSV.length, sha: "local-fixture", local: true });
   const driveIndex = Object.fromEntries((manifest.files || []).map((file) => [file.path, file.drive_id]));
   return { github: DEMO_GITHUB, raw: DEMO_RAW, driveUrl: DEMO_DRIVE, drive, files, sha: commit.sha || "", driveIndex };
 }
@@ -52,8 +55,9 @@ export async function probeDrive(fetchImpl, manifest) {
 
 export async function ingestDemoFile(brain, filePath, fetchImpl = fetch) {
   const response = await fetchImpl(`${DEMO_RAW}${filePath}`);
-  if (!response.ok) return { ok: false, brain, error: `${filePath} could not be fetched from GitHub.` };
-  const text = await response.text();
+  const localTargets = filePath === KPI_TARGETS_PATH ? KPI_TARGETS_CSV : "";
+  if (!response.ok && !localTargets) return { ok: false, brain, error: `${filePath} could not be fetched from GitHub.` };
+  const text = response.ok ? await response.text() : localTargets;
   let next = brain;
   const datasets = { ...(brain.datasets || {}) };
   const fetchedAt = new Date().toISOString();

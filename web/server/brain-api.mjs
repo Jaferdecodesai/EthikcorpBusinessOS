@@ -1,6 +1,6 @@
 import { parseWorkbook, validateOwnership } from "../phase1/customer-logic.mjs";
 import { connectorStatus, emptyBrain, ingestDocument, portalAccess, residency } from "./brain-pipeline.mjs";
-import { analyzeRevenue } from "./datasets.mjs";
+import { analyzeRevenue, projectModel } from "./datasets.mjs";
 import { runAgent } from "./agent.mjs";
 import { DEMO_DRIVE, DEMO_GITHUB, demoPlan, ingestDemoFile } from "./demo-intake.mjs";
 import { llmStatus } from "./llm/status.mjs";
@@ -21,7 +21,8 @@ export function publicBrain(brain, role, connectors, env = {}) {
     semantic: current.semantic || buildSemanticLayer(),
     quality: current.quality || null,
     demo: { github: current.demo?.github || DEMO_GITHUB, driveUrl: current.demo?.driveUrl || DEMO_DRIVE, drive: current.demo?.drive || null, filesTotal: current.demo?.filesTotal || 0, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] },
-    datasets: Object.entries(current.datasets || {}).map(([id, table]) => ({ id, rows: table.rows?.length || 0, sample: true })),
+    datasets: Object.entries(current.datasets || {}).map(([id, table]) => ({ id, rows: table.rows?.length || 0, sample: true, pass: table.validation?.pass !== false })),
+    model: { ...projectModel(current.datasets || {}), updated: current.quality?.fetchedAt || "" },
     opportunities: analysis.opportunities,
     pins: current.pins || [],
     tasks: current.tasks || [],

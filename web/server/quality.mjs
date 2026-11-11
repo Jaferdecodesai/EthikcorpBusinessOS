@@ -2,7 +2,8 @@ const KEYS = {
   "sample-data/monthly-revenue-by-service-line.csv": ["month", "service_line"],
   "sample-data/clients.csv": ["client_id"],
   "sample-data/sales-pipeline.csv": ["deal_id"],
-  "sample-data/department-headcount-and-hours.csv": ["department"]
+  "sample-data/department-headcount-and-hours.csv": ["department"],
+  "sample-data/kpi-targets.csv": ["metric_id"]
 };
 
 const OPEN = ["Discovery", "Qualification", "Proposal", "Negotiation"];

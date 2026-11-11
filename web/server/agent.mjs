@@ -1,11 +1,11 @@
 import { answerFromChunks } from "./brain-pipeline.mjs";
-import { analyzeRevenue, buildChart, queryDataset } from "./datasets.mjs";
+import { analyzeRevenue, buildChart, coerceChartType, queryDataset } from "./datasets.mjs";
 import { proposeAutomations } from "./workflows.mjs";
 import { REGION_LINE, workersAiNarrate, workersAiPlan } from "./llm/status.mjs";
 import { resolveQuestion } from "./semantic.mjs";
 
 const DATASETS = new Set(["revenue", "pipeline", "hours", "clients"]);
-const CHARTS = new Set(["bar", "line", "area", "donut", "funnel", "flow", "kpi", "table"]);
+const CHARTS = new Set(["bar", "column", "stacked_column", "grouped_bar", "donut", "pie", "kpi", "bullet"]);
 
 export function routeQuestion(question) {
   const text = String(question || "").toLowerCase();
@@ -20,12 +20,12 @@ export function routeQuestion(question) {
 
 export function planForRoute(route, question) {
   const lastMonths = /6|six/.test(String(question || "").toLowerCase()) ? 6 : null;
-  if (route === "revenue") return [{ tool: "query_dataset", args: { dataset: "revenue", lastMonths, groupBy: "service_line" } }, { tool: "make_chart", args: { type: lastMonths ? "line" : "bar" } }, { tool: "analyze_revenue" }];
+  if (route === "revenue") return [{ tool: "query_dataset", args: { dataset: "revenue", lastMonths, groupBy: "service_line" } }, { tool: "make_chart", args: { type: /share|mix|breakdown/.test(String(question || "").toLowerCase()) ? "donut" : lastMonths ? "column" : "bar" } }, { tool: "analyze_revenue" }];
   if (route === "risk") return [{ tool: "query_dataset", args: { dataset: "pipeline", mode: "risk" } }, { tool: "make_chart", args: { type: "bar" } }, { tool: "analyze_revenue" }];
-  if (route === "pipeline") return [{ tool: "query_dataset", args: { dataset: "pipeline", mode: "pipeline" } }, { tool: "make_chart", args: { type: "funnel" } }, { tool: "analyze_revenue" }];
+  if (route === "pipeline") return [{ tool: "query_dataset", args: { dataset: "pipeline", mode: "pipeline" } }, { tool: "make_chart", args: { type: "bar" } }, { tool: "analyze_revenue" }];
   if (route === "utilisation") return [{ tool: "query_dataset", args: { dataset: "hours" } }, { tool: "make_chart", args: { type: "bar" } }, { tool: "analyze_revenue" }];
   if (route === "opportunity") return [{ tool: "analyze_revenue" }, { tool: "make_chart", args: { type: "bar" } }, { tool: "search_brain" }];
-  if (route === "automation") return [{ tool: "propose_automation" }, { tool: "make_chart", args: { type: "flow" } }];
+  if (route === "automation") return [{ tool: "propose_automation" }, { tool: "make_chart", args: { type: "bar" } }];
   return [{ tool: "search_brain" }, { tool: "analyze_revenue" }];
 }
 
@@ -37,7 +37,7 @@ export function safeCall(call, question) {
     const lastMonths = Number(call.args?.lastMonths);
     return { tool: "query_dataset", args: { dataset, lastMonths: lastMonths >= 1 && lastMonths <= 12 ? lastMonths : planForRoute(routeQuestion(question), question).find((item) => item.tool === "query_dataset")?.args?.lastMonths || null, mode: call.args?.mode || (routeQuestion(question) === "risk" ? "risk" : routeQuestion(question) === "pipeline" ? "pipeline" : null), groupBy: call.args?.groupBy || (dataset === "revenue" ? "service_line" : dataset === "pipeline" ? "stage" : null) } };
   }
-  if (call.tool === "make_chart") return { tool: "make_chart", args: { type: CHARTS.has(call.args?.type) ? call.args.type : "bar" } };
+  if (call.tool === "make_chart") return { tool: "make_chart", args: { type: coerceChartType(CHARTS.has(call.args?.type) ? call.args.type : call.args?.type || "bar") } };
   if (["search_brain", "analyze_revenue", "propose_automation", "create_task"].includes(call.tool)) return { tool: call.tool, args: {} };
   return null;
 }
@@ -59,7 +59,7 @@ export async function runAgent(brain, question, options = {}) {
     emit({ tool: "query_dataset", status: "done", detail: resolved.refuse ? "Refused. The tables do not contain an answer." : `${resolved.provenance?.file || "tables"} · ${resolved.provenance?.rowsUsed ?? 0} rows · ${resolved.provenance?.filter || "all rows"}` });
     const chart = resolved.ok && resolved.rows?.length ? buildChart(resolved.rows.map((row) => ({ label: row.service_line || row.department || row.client_name || row.stage || resolved.label, value: row.value ?? row.revenue_aed ?? row.value_aed ?? resolved.value })), { type: "bar", title: resolved.label, unit: resolved.unit === "AED" ? "AED" : resolved.unit }) : null;
     if (chart) emit({ tool: "make_chart", status: "done", detail: "Chart uses the same rows as the answer." });
-    return { answer: resolved.answer, steps, chart, fixes: analyzeRevenue(brain.datasets || {}).opportunities.slice(0, 4), citations: [], provenance: resolved.provenance || null, rows: resolved.rows || [], sample: Boolean(brain.datasets?.revenue), refused: Boolean(resolved.refuse), llm: "not_configured", region: REGION_LINE };
+    return { answer: resolved.answer, steps, chart, view: viewFor(route, question), period: /last 6|six month/.test(String(question || "").toLowerCase()) ? "last-6" : null, chartId: chart?.id || viewChart(viewFor(route, question)), bullets: resolved.ok ? [{ label: resolved.label, value: resolved.value, unit: resolved.unit }] : [], fixes: analyzeRevenue(brain.datasets || {}).opportunities.slice(0, 4), citations: [], provenance: resolved.provenance || null, rows: resolved.rows || [], sample: Boolean(brain.datasets?.revenue), refused: Boolean(resolved.refuse), llm: "not_configured", region: REGION_LINE };
   }
   emit({ tool: "plan", status: "done", detail: planner === "workers-ai" ? `Workers AI planned ${calls.length} tool calls. ${REGION_LINE}` : `Deterministic planner chose ${calls.length} tools. No Workers AI call. ${REGION_LINE}` });
   const context = { rows: [], raw: null };
@@ -80,7 +80,8 @@ export async function runAgent(brain, question, options = {}) {
     if (narrative) { answer = narrative; emit({ tool: "narrate", status: "done", detail: "Narrative uses only numbers present in the tool outputs." }); }
     else emit({ tool: "narrate", status: "done", detail: "Narrative was not used. Figures stayed with the tool results." });
   }
-  return { answer, steps, chart, fixes, citations, sample: Boolean(brain.datasets?.revenue), llm: planner === "workers-ai" ? "workers-ai" : "not_configured", region: REGION_LINE };
+  const view = viewFor(route, question);
+  return { answer, steps, chart, view, period: /6|six/.test(String(question || "").toLowerCase()) ? "last-6" : null, chartId: chart?.id || viewChart(view), bullets: figureBullets(route, lastRows, chart?.unit), fixes, citations, sample: Boolean(brain.datasets?.revenue), llm: planner === "workers-ai" ? "workers-ai" : "not_configured", region: REGION_LINE };
 }
 
 function executeTool(call, brain, question, context) {
@@ -98,9 +99,9 @@ function executeTool(call, brain, question, context) {
     const rows = context.rows || [];
     const chart = rows[0]?.impactAed != null
       ? buildChart(rows.map((row) => ({ label: row.title, value: row.impactAed })), { type: "bar", title: "Revenue actions", unit: "AED" })
-      : (type === "line" || type === "area") && context.raw
-        ? buildChart(context.raw, { type, title: "Revenue by service line, last 6 months", series: "service_line", unit: "AED" })
-        : buildChart(rows.map((row) => ({ stage: row.stage, service_line: row.service_line, department: row.department, label: row.label || row.name || row.title, value: row.value ?? row.utilisation_pct ?? row.impactAed })), { type: type === "flow" ? "bar" : type, title: chartTitle(question, type), unit: /utili/.test(String(question).toLowerCase()) ? "%" : "AED" });
+      : (type === "column" || type === "stacked_column") && context.raw
+        ? buildChart(context.raw, { type, title: "Revenue by month", series: "service_line", unit: "AED" })
+        : buildChart(rows.map((row) => ({ stage: row.stage, service_line: row.service_line, department: row.department, label: row.label || row.name || row.title, value: row.value ?? row.utilisation_pct ?? row.impactAed })), { type, title: chartTitle(question, type), unit: /utili/.test(String(question).toLowerCase()) ? "%" : "AED" });
     return { ok: true, detail: `${chart.type} from query_dataset rows.`, chart, rows };
   }
   if (call.tool === "analyze_revenue") {
@@ -122,8 +123,36 @@ function chartTitle(question, type) {
   if (/risk/.test(text)) return "Deals below 40% probability";
   if (/utili/.test(text)) return "Department utilisation, October 2026";
   if (/pipeline|funnel/.test(text)) return "Pipeline by stage";
-  if (/revenue/.test(text)) return type === "line" ? "Revenue by service line, last 6 months" : "Revenue by service line";
+  if (/share|mix/.test(text)) return "Share of revenue";
+  if (/revenue/.test(text)) return type === "column" ? "Revenue by month" : "Revenue by service line";
   return "Live insight";
+}
+
+function viewFor(route, question) {
+  const text = String(question || "").toLowerCase();
+  if (route === "utilisation") return "utilisation";
+  if (route === "pipeline") return "pipeline";
+  if (route === "risk") return "risk";
+  if (route === "opportunity") return "actions";
+  if (/share|mix|breakdown/.test(text)) return "donut";
+  return "revenue";
+}
+
+function viewChart(view) {
+  if (view === "utilisation") return "chart-utilisation";
+  if (view === "pipeline") return "chart-pipeline";
+  if (view === "risk") return "chart-risk";
+  if (view === "actions") return "chart-actions";
+  if (view === "donut") return "chart-revenue-share";
+  return "chart-revenue-lines";
+}
+
+function figureBullets(route, rows, unit) {
+  return (rows || []).slice(0, 5).map((row) => ({
+    label: row.service_line || row.stage || row.department || row.name || row.title || row.label || "Figure",
+    value: row.value ?? row.impactAed ?? row.revenue_aed ?? row.value_aed ?? row.utilisation_pct,
+    unit: row.impactAed != null ? "AED" : (unit || (route === "utilisation" ? "%" : "AED"))
+  })).filter((item) => item.value != null);
 }
 
 function renderAnswer(route, rows, citations) {

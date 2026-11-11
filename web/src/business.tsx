@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import catalog from "../shared/departments.json";
 import { SOURCES } from "../phase1/customer-logic.mjs";
-import { ceoDashboard } from "../server/ceo-dashboard.mjs";
-import { BarList, LiveChart } from "./charts";
+import { KpiTile, LiveChart, type ChartSpec, type KpiModel } from "./charts";
+import { buildOverview } from "../server/datasets.mjs";
+import { formatCompact, formatFull } from "./format";
 
 type Access = {
   role: "customer" | "dev";
@@ -21,6 +22,7 @@ type Access = {
   demo?: { github: string; driveUrl: string; sha?: string; needsReingest?: boolean; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
   quality?: { sha: string; fetchedAt: string; files: Record<string, { path: string; source: string; driveId?: string; rows: number; pass: boolean; schema?: { name: string; type: string }[] }>; cross?: { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } };
   datasets?: { id: string; rows: number }[];
+  model?: { ready: boolean; updated?: string; revenue: { month: string; label: string; line: string; value: number }[]; hours: { department: string; hours: number; available: number; billable: number }[]; stages: { name: string; value: number }[]; risk: { name: string; value: number }[]; winRate: number | null; winRateValue: number | null; weighted: number; targets: { metric: string; subject: string; value: number; unit: string; goodDirection: string }[] };
   opportunities?: { id: string; title: string; impactAed: number; formula: string; confidence: string; owner: string }[];
   pins?: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[] }[] }[];
   tasks?: { id: string; title: string; department: string; impactAed: number }[];
@@ -29,14 +31,8 @@ type Access = {
   llm?: { provider: string; model: string | null; region: string; embedding: string; azure: { missing: string[] } };
 };
 
-const dash = ceoDashboard();
-
-const FACE_CYCLE = ["#09A5EC", "#FD7152", "#D6FD21"];
-const BAR_CYCLE = ["#09A5EC", "#FD7152", "#D6FD21"];
-
-function faceFor(id: string) {
-  const index = catalog.findIndex((item) => item.id === id);
-  return { bg: FACE_CYCLE[(index < 0 ? 0 : index) % FACE_CYCLE.length], fg: "#03050A" };
+function faceFor(_id: string) {
+  return { bg: "#FFFFFF", fg: "#1A1F24" };
 }
 
 function stageClass(id: string, status: string) {
@@ -76,47 +72,17 @@ function DeptIcon({ id }: { id: string }) {
   return <svg {...p}><path d="M12 3l7 3v6c0 4.5-3 7-7 9-4-2-7-4.5-7-9V6z" /></svg>;
 }
 
-function Spark({ values, color }: { values: number[]; color: string }) {
-  const max = Math.max(0.01, ...values);
-  const width = 120;
-  const height = 48;
-  const points = values.map((value, index) => {
-    const x = values.length === 1 ? width / 2 : (index / (values.length - 1)) * width;
-    const y = height - 4 - (value / max) * (height - 8);
-    return `${x},${y}`;
-  }).join(" ");
-  const area = `0,${height} ${points} ${width},${height}`;
-  return <svg className="spark" viewBox={`0 0 ${width} ${height}`} aria-hidden="true"><polygon points={area} fill={color} opacity="0.16" /><polyline points={points} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" /></svg>;
-}
-
 function Ring({ percent }: { percent: number }) {
   const radius = 68;
   const turn = 2 * Math.PI * radius;
   const done = (Math.min(100, Math.max(0, percent)) / 100) * turn;
   return <div className="ring-wrap">
     <svg viewBox="0 0 180 180" role="img" aria-label={`Build progress ${percent} percent`}>
-      <circle cx="90" cy="90" r={radius} fill="none" stroke="#03050A" strokeWidth="18" />
-      <circle cx="90" cy="90" r={radius} fill="none" stroke="#09A5EC" strokeWidth="14" />
-      {done > 0 && <circle cx="90" cy="90" r={radius} fill="none" stroke="#D6FD21" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${done} ${turn - done}`} transform="rotate(-90 90 90)" />}
+      <circle cx="90" cy="90" r={radius} fill="none" stroke="#E6EAEE" strokeWidth="14" />
+      {done > 0 && <circle cx="90" cy="90" r={radius} fill="none" stroke="#1F5FBF" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${done} ${turn - done}`} transform="rotate(-90 90 90)" />}
     </svg>
     <div className="ring-num">{percent}<small>%</small></div>
   </div>;
-}
-
-function TrendLine({ points }: { points: { week: string; netHours: number }[] }) {
-  const max = Math.max(1, ...points.map((point) => point.netHours));
-  const width = 360;
-  const height = 120;
-  const coords = points.map((point, index) => {
-    const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * (width - 16) + 8;
-    const y = height - 18 - (point.netHours / max) * (height - 32);
-    return [x, y] as const;
-  });
-  const d = coords.map((pair, index) => `${index ? "L" : "M"}${pair[0]},${pair[1]}`).join(" ");
-  return <svg className="trend" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={points.map((point) => `${point.week} ${point.netHours}`).join(", ")}>
-    <path d={d} fill="none" stroke="#03050A" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
-    {coords.map((pair, index) => <circle key={points[index].week} cx={pair[0]} cy={pair[1]} r="4.5" fill="#03050A" />)}
-  </svg>;
 }
 
 async function api(path: string, body?: unknown) {
@@ -130,6 +96,15 @@ export function BusinessApp() {
   const [hash, setHash] = useState(window.location.hash || "#pm");
   const [state, setState] = useState<Access | null>(null);
   const [error, setError] = useState("");
+  const [navOpen, setNavOpen] = useState(false);
+  const [ceoView, setCeoView] = useState(true);
+  const [chatOpen, setChatOpen] = useState(() => localStorage.getItem("bos-chat") !== "rail");
+  function toggleChat() {
+    setChatOpen((value) => {
+      localStorage.setItem("bos-chat", value ? "rail" : "open");
+      return !value;
+    });
+  }
   async function reload() {
     try { setState(await api("/api/brain/state")); setError(""); }
     catch (reason) { setError((reason as Error).message); }
@@ -147,20 +122,31 @@ export function BusinessApp() {
   const tab = raw.startsWith("bots/") ? "bots" : (raw === "dev" || raw === "customer" ? "pm" : raw);
   const current = state?.tabs.find((item) => item.id === tab);
   const allowed = !current || current.enabled;
-  return <div className="portal">
+  const pageName = tab === "brain" ? "Business overview" : tab === "bots" ? "Businessbots" : "BusinessBrain Builder";
+  return <div className={`portal ${chatOpen ? "chat-open" : "chat-rail"} ${navOpen ? "nav-open" : ""}`}>
+    {navOpen && <button type="button" className="nav-scrim" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
     <aside className="side" aria-label="Ethikcorp BusinessOS">
       <div className="side-stick">
-      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
-      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`}><i className={`navdot ${item.id}`} />{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it"><i className={`navdot ${item.id}`} />{item.label}</button>)}</nav>
-      <div className="sidefoot">{state?.role === "dev" ? "Development team. All three areas are open." : "Customer view. Locked areas open from live build progress."}</div>
+      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b></span></a>
+      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`} onClick={() => setNavOpen(false)}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
+      <div className="sidefoot">{state?.role === "dev" ? "Development view. Answer traces stay in the chat." : "CEO view. Locked areas open from live build progress."}</div>
       </div>
     </aside>
     <div className="maincol">
       <header className="topbar">
-        <div className="ctx"><span>Ethikcorp BusinessOS</span><span aria-hidden="true">/</span><b>{tab === "brain" ? "BusinessBrain" : tab === "bots" ? "Businessbots" : "BusinessBrain Builder"}</b></div>
-        <div className="pills"><span className="pill a"><i />Prototype · not UAE-hosted</span><span className="pill badge"><i />No base model connected</span></div>
+        <button type="button" className="nav-toggle" aria-label={navOpen ? "Close navigation" : "Open navigation"} onClick={() => setNavOpen((value) => !value)}>Menu</button>
+        <div className="ctx"><span>Ethikcorp BusinessOS</span><span aria-hidden="true">/</span><b>{pageName}</b></div>
+        <div className="pills">
+          <details className="env-pop">
+            <summary className="badge neutral">Prototype</summary>
+            <div className="pop"><p>{state?.residency.prototype || "This preview is not hosted in the UAE."}</p><p>{state?.llm?.provider === "workers-ai" ? state.llm.model : "No base model connected."}</p></div>
+          </details>
+          {state?.role === "dev" && <button type="button" className="btn ghost sm ceo-toggle" onClick={() => setCeoView((value) => !value)}>{ceoView ? "CEO view" : "Development view"}</button>}
+          <span className="user-menu">{state?.role === "dev" && !ceoView ? "Development" : "CEO"}</span>
+        </div>
       </header>
       <div className="page live-pad">
+        {!state && <DashboardSkeleton />}
         {error && <div className="banner-need" role="alert">{error}</div>}
         {!allowed && <Locked percent={state?.percent || 0} what={tab} departments={state?.departments || []} />}
         {allowed && tab === "pm" && state && <Project state={state} reload={reload} />}
@@ -168,6 +154,7 @@ export function BusinessApp() {
         {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
       </div>
     </div>
+    <ChatDock open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && !ceoView ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={raw.startsWith("bots/") ? raw.split("/")[1] : undefined} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />
   </div>;
 }
 
@@ -178,15 +165,12 @@ function Locked({ percent, what, departments }: { percent: number; what: string;
   return <div className="lock-stage">
     <div className="lock-preview" aria-hidden="true">
       <div className="bento">
-        <article className="tile sky"><div className="l">{bots ? "Confirmed" : "Indexed"}</div><div className="v">{bots ? confirmed : 0}</div></article>
-        <article className="tile lime"><div className="l">{bots ? "Departments" : "Passages"}</div><div className="v">{bots ? 9 : 0}</div></article>
-        <article className="tile coral"><div className="l">Progress</div><div className="v">{shown}%</div></article>
-        <article className="tile sky"><div className="l">{bots ? "Open" : "Left"}</div><div className="v">{bots ? 9 - confirmed : 0}</div></article>
-        <article className="tile lime span2"><div className="l">{bots ? "Workflows" : "Hours"}</div><div className="v">{bots ? "Templates" : "0"}</div></article>
-        <article className="tile coral span2"><div className="l">Still building</div><div className="v">{shown}%</div></article>
-        <article className="tile sky"><div className="l">Build</div><div className="v">{shown}</div></article>
-        <article className="tile lime"><div className="l">Ready</div><div className="v">{bots ? confirmed : 0}</div></article>
-        <article className="tile coral span2"><div className="l">Attention</div><div className="v">{bots ? 9 - confirmed : 0}</div></article>
+        <article className="tile"><div className="l">{bots ? "Confirmed" : "Indexed"}</div><div className="v">{bots ? confirmed : 0}</div></article>
+        <article className="tile"><div className="l">{bots ? "Departments" : "Passages"}</div><div className="v">{bots ? 9 : 0}</div></article>
+        <article className="tile"><div className="l">Progress</div><div className="v">{shown}%</div></article>
+        <article className="tile"><div className="l">{bots ? "Open" : "Left"}</div><div className="v">{bots ? 9 - confirmed : 0}</div></article>
+        <article className="tile span2"><div className="l">{bots ? "Workflows" : "Hours"}</div><div className="v">{bots ? "Templates" : "0"}</div></article>
+        <article className="tile span2"><div className="l">Still building</div><div className="v">{shown}%</div></article>
       </div>
     </div>
     <section className="lock-card">
@@ -227,7 +211,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
     <DemoSources state={state} reload={reload} />
     <Ownership reload={reload} />
     <Handoff reload={reload} />
-    <section className="card band-card lift"><div className="card-band coral">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p></div></section>
+    <section className="card band-card lift"><div className="card-band">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p><p className="note">About: built by Aqionlabs.ai.</p></div></section>
     {state.role === "dev" && <DevTools state={state} reload={reload} />}
   </>;
 }
@@ -235,7 +219,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
 function Outline({ state }: { state: Access }) {
   const stages: [string, { status: string; detail: string }][] = [
     ["retrieval", { status: state.indexLayer?.retrieval === "built" ? "done" : "not_started", detail: state.indexLayer?.retrieval === "built" ? "Heading-anchored passages are in the retrieval index." : "No passages are indexed yet." }],
-    ["semantic", { status: state.indexLayer?.semantic === "built" ? "done" : "not_started", detail: "Synonyms, service-line aliases, and KPI definitions. The corpus has no numeric targets." }],
+    ["semantic", { status: state.indexLayer?.semantic === "built" ? "done" : "not_started", detail: state.model?.targets?.length ? "Synonyms, service-line aliases, KPI definitions, and the sample kpi-targets file." : "Synonyms and KPI definitions are ready. Numeric targets appear after the sample kpi-targets file is indexed." }],
     ["instruction", { status: "done", detail: "training/ethikcorp-businessos-instruct.jsonl is prepared for a later LoRA. No model has been fine-tuned." }],
     ...Object.entries(state.stages),
     ["finetune", { status: "held", detail: state.finetune.detail }]
@@ -349,82 +333,168 @@ function DevTools({ state, reload }: { state: Access; reload: () => Promise<void
     </div></section>;
 }
 
+type Insight = {
+  answer?: string;
+  error?: string;
+  view?: string;
+  period?: string | null;
+  chartId?: string;
+  bullets?: { label: string; value: number; unit?: string }[];
+  fixes?: Access["opportunities"];
+  steps?: { tool: string; detail: string }[];
+  refused?: boolean;
+  citations?: { document: string; excerpt: string }[];
+};
+
+const PROMPTS = ["Revenue by service line, last 6 months", "Department utilisation", "Where can we make AED 1M more?"];
+
 function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }) {
-  const [insight, setInsight] = useState<{ chart?: Access["pins"] extends (infer T)[] | undefined ? T : never; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[]; provenance?: { file: string; rowsUsed: number; filter: string }; rows?: Record<string, unknown>[] } | null>(null);
-  const hourRows = dash.hourBars.map((row, index) => ({ ...row, note: "estimate", color: BAR_CYCLE[index % BAR_CYCLE.length] }));
-  return <>
-    <header className="greet">
-      <div>
-        <div className="eyebrow">Ethikcorp BusinessBrain</div>
-        <h1>The company, in one view.</h1>
-        <p className="sub">Ask from indexed documents. {state.llm?.region || "Cloudflare Workers AI – not UAE-resident; UAE North option ready"}</p>
-        <span className="pill badge">{state.llm?.provider === "workers-ai" ? state.llm.model : "Model not connected"}</span>
+  const [period, setPeriod] = useState("last-6");
+  const [mode, setMode] = useState("revenue");
+  const [highlight, setHighlight] = useState("");
+  const [pending, setPending] = useState(false);
+  const [filter, setFilter] = useState<string | null>(null);
+  const [undo, setUndo] = useState<{ period: string; mode: string; filter: string | null } | null>(null);
+  const [banner, setBanner] = useState(() => sessionStorage.getItem("bos-sample-banner") !== "off");
+  const [fixes, setFixes] = useState(state.opportunities || []);
+  useEffect(() => { setFixes(state.opportunities || []); }, [state.opportunities]);
+  useEffect(() => {
+    const onInsight = (event: Event) => {
+      const detail = (event as CustomEvent<Insight>).detail;
+      if (!detail || detail.error || detail.refused) return;
+      if (detail.view) {
+        setUndo({ period, mode, filter });
+        setMode(detail.view);
+        if (detail.period) setPeriod(detail.period);
+        setFilter(filterLabel(detail.view));
+        const id = detail.chartId && document.getElementById(detail.chartId) ? detail.chartId : chartIdFor(detail.view);
+        setHighlight(id);
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }), 50);
+        window.setTimeout(() => setHighlight(""), reduce ? 3000 : 1600);
+      }
+      if (detail.fixes) setFixes(detail.fixes);
+    };
+    const onPending = (event: Event) => setPending(Boolean((event as CustomEvent<boolean>).detail));
+    const onUndo = () => {
+      if (!undo) return;
+      setPeriod(undo.period);
+      setMode(undo.mode);
+      setFilter(undo.filter);
+      setUndo(null);
+    };
+    window.addEventListener("bos-insight", onInsight);
+    window.addEventListener("bos-pending", onPending);
+    window.addEventListener("bos-undo", onUndo);
+    return () => {
+      window.removeEventListener("bos-insight", onInsight);
+      window.removeEventListener("bos-pending", onPending);
+      window.removeEventListener("bos-undo", onUndo);
+    };
+  }, [period, mode, filter, undo]);
+  const overview = state.model?.ready ? buildOverview(state.model, { period, mode, actions: fixes }) : null;
+  return <div className="board">
+    <header className="page-head">
+      <h1>Business overview</h1>
+      <p className="sub">Recognised revenue, pipeline, utilisation and win rate from the indexed sample tables.</p>
+      <div className="controls">
+        <label>Period<select aria-label="Period" value={overview?.period || period} onChange={(event) => { setPeriod(event.target.value); setFilter(null); }}>{(overview?.periods || [{ id: "last-6", label: "May–Oct 2026" }]).map((item: { id: string; label: string }) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <span className="note">Currency AED</span>
+        {state.model?.updated && <span className="note">{updatedLabel(state.model.updated)}</span>}
       </div>
-      <div className="greet-stat"><span className="sample-badge">SAMPLE DATA</span><b>{dash.company.netHoursPerWeek}</b><span>Sample net hours / week. Not measured.</span></div>
+      {banner && <div className="info-banner" role="status"><span>Sample data — figures are illustrative until live sources are connected.</span><button type="button" onClick={() => { sessionStorage.setItem("bos-sample-banner", "off"); setBanner(false); }}>Dismiss</button></div>}
+      {filter && <div className="filter-pill">Filtered by chat: {filter} <button type="button" onClick={() => window.dispatchEvent(new Event("bos-undo"))}>Undo</button></div>}
     </header>
-    <OpportunityList items={state.opportunities || []} reload={reload} title="Top revenue opportunities" />
-    {(state.pins || []).length > 0 && <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>Pinned insights</h2></div><div className="grid g2">{state.pins?.map((chart) => <LiveChart key={chart.id} spec={chart} />)}</div></section>}
-    {insight?.chart && <section className="card pad insight"><div className="ch"><h2>Live insight</h2><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/pin", { chart: insight.chart }); await reload(); }}>Pin to dashboard</button></div><LiveChart spec={insight.chart} />{insight.provenance && <p className="note">{insight.provenance.file} · {insight.provenance.rowsUsed} rows · {insight.provenance.filter}</p>}{(insight.rows || []).length > 0 && <details className="how"><summary>View rows</summary><table className="tbl"><tbody>{(insight.rows || []).slice(0, 8).map((row: Record<string, unknown>, index: number) => <tr key={index}><td>{Object.entries(row).slice(0, 4).map(([key, value]) => `${key}: ${value}`).join(" · ")}</td></tr>)}</tbody></table></details>}{insight.steps && <ol className="steps">{insight.steps.map((step, index) => <li key={index}><b>{step.tool}</b> {step.detail}</li>)}</ol>}</section>}
-    <div className="bento">
-      <article className="tile sky lift"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article>
-      <article className="tile lime lift"><div className="l">Passages</div><div className="v">{state.chunks}</div></article>
-      <article className="tile sky lift"><div className="l">Sample rows</div><div className="v">{(state.datasets || []).reduce((sum, table) => sum + table.rows, 0)}</div><div className="x">Rows in the indexed sample tables.</div></article>
-      <article className="tile lime lift"><div className="l">Open sample tasks</div><div className="v">{dash.company.tasksOpen}</div><div className="x">{dash.company.tasksDone} done. Sample snapshot.</div></article>
-      <section className="card band-card lift span2"><div className="card-band sky">Sample net hours</div><div className="pad"><BarList bold caption="Sample net hours per week from the setup model. Not measured." rows={hourRows} /></div></section>
-      <section className="card band-card lift span2"><div className="card-band coral">Lead mix</div><div className="pad"><div className="mix">{dash.pipeline.map((item) => <div className={`mix-cell ${item.label.toLowerCase()}`} key={item.label}><b>{item.value}</b><span>{item.label}</span></div>)}</div><p className="note">{dash.pipelineNote}</p></div></section>
-      <article className="tile lime lift span2"><div className="l">Illustrative week</div><TrendLine points={dash.trend} /><div className="x">{dash.trendNote}</div></article>
-      <article className="tile lime lift"><div className="l">Automations</div><div className="v">{dash.company.automations}</div><div className="x">Setup model. Not running.</div></article>
-      <article className="tile coral lift"><div className="l">ClickUp</div><div className="v">{dash.company.clickupOpenTasks}</div><div className="x">Open tasks. Sample snapshot.</div></article>
-      <article className="tile sky lift"><div className="l">People</div><div className="v">{dash.company.employees}</div><div className="x">Demo snapshot.</div></article>
-      <article className="tile lime lift"><div className="l">Hours logged</div><div className="v">{dash.company.hoursLogged}</div><div className="x">Sample snapshot.</div></article>
-      <article className="tile coral lift"><div className="l">Demo hours saved</div><div className="v">{dash.company.hoursSavedDemo}</div><div className="x">Not measured.</div></article>
-      <article className="tile sky lift"><div className="l">Runs / week</div><div className="v">{dash.company.runsPerWeek}</div><div className="x">Sample model.</div></article>
-    </div>
-    <ChatDock area="brain" onResult={(result) => setInsight(result)} />
-    {insight?.fixes && <OpportunityList items={insight.fixes} reload={reload} title="Revenue fixes" />}
-  </>;
+    {!overview && <section className="card pad empty-card"><h2>No revenue recorded yet</h2><p>Ingest the demo sources to load the sample tables. Nothing is invented before those files are indexed.</p></section>}
+    {overview && <div className="kpi-row">{(overview.kpis as KpiModel[]).map((kpi) => <KpiTile key={kpi.id} kpi={kpi} onSelect={() => { setMode(kpi.mode || "revenue"); setFilter(null); }} />)}</div>}
+    {overview && <div className="chart-row">{(overview.charts as ChartSpec[]).map((chart) => <div className={`chart-card span-${chart.span || 6} ${highlight === chart.id ? "flash" : ""} ${pending ? "pending" : ""}`} key={chart.id}><LiveChart spec={chart} /></div>)}</div>}
+    {overview && !overview.charts.length && <section className="card pad empty-card"><h2>No rows for this view</h2><button type="button" className="btn ghost" onClick={() => setPeriod("last-6")}>Change period</button></section>}
+    <OpportunityList items={fixes} reload={reload} title="Revenue fixes" />
+  </div>;
+}
+
+function chartIdFor(view: string) {
+  if (view === "utilisation") return "chart-utilisation";
+  if (view === "pipeline") return "chart-pipeline";
+  if (view === "risk") return "chart-risk";
+  if (view === "actions") return "chart-actions";
+  if (view === "donut") return "chart-revenue-share";
+  return "chart-revenue-lines";
+}
+
+function filterLabel(view: string) {
+  if (view === "utilisation") return "Utilisation · October 2026";
+  if (view === "pipeline") return "Pipeline";
+  if (view === "risk") return "Deals below 40%";
+  if (view === "actions") return "Revenue actions";
+  if (view === "donut") return "Share of revenue";
+  return "Revenue · May–Oct 2026";
+}
+
+function updatedLabel(iso: string) {
+  const text = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dubai", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
+  return `Last updated ${text} (UTC+4)`;
+}
+
+function DashboardSkeleton() {
+  return <div className="board" aria-hidden="true">{[0, 1, 2, 3].map((item) => <div className="skeleton tile" key={item}><span /><span /><span /></div>)}<div className="skeleton chart" /><div className="skeleton chart" /></div>;
 }
 
 function OpportunityList({ items, reload, title }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void>; title: string }) {
   if (!items.length) return null;
-  return <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>{title}</h2><span className="sample-badge">SAMPLE DATA</span></div><div className="fixes">{items.slice(0, 4).map((item) => <article className="fix" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : `AED ${item.impactAed.toLocaleString("en-AE")}`}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</div></section>;
+  return <section className="card pad span-12 fixes-card"><div className="ch"><h2>{title}</h2><span className="badge neutral">Sample</span></div><div className="fixes">{items.slice(0, 4).map((item) => <article className="fix" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : formatFull(item.impactAed, "AED")}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details><button type="button" className="btn ghost sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</div></section>;
 }
 
 function Bots({ hash, state, reload }: { hash: string; state: Access; reload: () => Promise<void> }) {
-  const selected = hash.split("/")[1];
+  const parts = hash.replace("#", "").split("/");
+  const selected = parts[1];
+  const process = parts[2] === "process";
   const department = catalog.find((item) => item.id === selected);
   if (!department) return <div className="dept-grid">{catalog.map((item) => {
-    const face = faceFor(item.id);
-    const sample = dash.departments.find((row) => row.id === item.id);
-    const hours = sample?.netHoursPerWeek ?? 0;
-    const spark = dash.trend.map((point) => point.netHours * (dash.company.netHoursPerWeek ? hours / dash.company.netHoursPerWeek : 0));
-    return <a className="dept-card lift" key={item.id} href={`#bots/${item.id}`}>
-      <div className="dept-face" style={{ background: face.bg, color: face.fg }}><div className="dept-face-row"><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div><div className="dept-metric">{hours}</div><div className="dept-kicker">Sample net h/week</div></div></div><Spark values={spark} color="#03050A" /></div>
-      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p></div>
+    const weekly = (state.workflowMaps?.[item.id]?.flows || []).reduce((sum, flow) => sum + (flow.weeklyHours || 0), 0);
+    return <a className="dept-card" key={item.id} href={`#bots/${item.id}`}>
+      <div className="dept-face"><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div>{weekly ? <div className="dept-metric">{weekly.toLocaleString("en-AE", { maximumFractionDigits: 1 })} h</div> : <div className="dept-metric">—</div>}<div className="dept-kicker">{weekly ? "Sample hours / week" : "Not measured"}</div></div></div>
+      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p>{!weekly && <span className="badge neutral">Not measured</span>}</div>
     </a>;
   })}</div>;
-  const face = faceFor(department.id);
   return <>
-    <header className="dept-hero" style={{ background: face.bg, color: face.fg }}><div><div className="dept-kicker">{department.code}</div><h1>{department.name}</h1><p className="sub" style={{ color: "inherit" }}>{department.mandate}</p></div><a className="btn ghost" href="#bots">All departments</a></header>
-    <BotDesk departmentId={department.id} state={state} reload={reload} />
-    <section className="card pad"><div className="ch"><h2>Workflows</h2><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "state-chip done" : "state-chip attn"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed by the development team" : "Not confirmed"}</span></div>
-      {department.workflows.map((workflow) => <div className="plainrow" key={workflow.id}><span /><span><b>{workflow.name}</b><small>{workflow.description}</small></span><span className="note">Template · not running</span></div>)}
-    </section>
+    <header className="page-head">
+      <p className="note"><a href="#bots">Businessbots</a> / {department.name}</p>
+      <h1>{department.name}</h1>
+      <p className="sub">{department.mandate}</p>
+      <div className="controls"><a className="btn ghost" href="#bots">All departments</a><a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "badge success" : "badge neutral"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : "Not confirmed"}</span></div>
+    </header>
+    <BotDesk departmentId={department.id} process={process} state={state} reload={reload} />
     {state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>Confirm this department</button>}
-    <ChatDock area="bots" departmentId={department.id} />
   </>;
 }
 
-function BotDesk({ departmentId, state, reload }: { departmentId: string; state: Access; reload: () => Promise<void> }) {
+function BotDesk({ departmentId, process, state, reload }: { departmentId: string; process: boolean; state: Access; reload: () => Promise<void> }) {
   const map = state.workflowMaps?.[departmentId];
   const saved = (state.automations || []).filter((item) => item.departmentId === departmentId);
   const partners = state.departments.filter((item) => item.id !== departmentId);
-  return <>
-    {map?.flows?.length ? <section className="card pad"><div className="ch"><h2>Workflow map</h2><span className="sample-badge">SAMPLE DATA</span></div>{map.flows.map((flow) => <div key={flow.title}><h3>{flow.title}</h3><ol className="wmap">{flow.steps.map((step, index) => { const hot = isBottleneck(step, map.friction || []); const hours = flow.weeklyHours ? Math.round(flow.weeklyHours / Math.max(1, flow.steps.length) * 10) / 10 : 0; return <li key={step}><div className={hot ? "wnode hot" : index % 3 === 2 ? "wnode alt" : "wnode"} style={{ animationDelay: `${index * 70}ms` }}><b>{index + 1}</b><span>{step}</span><small>{hours} h/week</small>{hot && <em>Bottleneck</em>}</div>{index < flow.steps.length - 1 && <i className="wlink" aria-hidden="true" />}</li>; })}</ol></div>)}{map.friction?.length > 0 && <div className="ch"><h2>Bottlenecks</h2></div>}{map.friction?.map((item) => <p key={item}>{item}</p>)}</section> : null}
-    {map?.proposals?.length ? <section className="card pad"><div className="ch"><h2>Proposed automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{map.proposals.map((item) => <article className="fix" key={item.id}><h3>{item.name}</h3><p className="chain">{item.chain || item.trigger}</p><p className="note">Tools: {item.tools?.join(", ")}. {item.hoursSavedPerMonth} hours / month.</p><div className="impact">{item.impactAed == null ? "—" : `AED ${item.impactAed.toLocaleString("en-AE")}`}</div><p>{item.revenueAngle}</p><details className="how"><summary>How we calculated</summary><p>{item.assumption}. {item.formula}. {item.aedFormula}</p></details>{state.role === "dev" && <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation", item); await reload(); }}>Build automation</button>}</article>)}</section> : <p className="note">Ingest the demo sources to load this department’s workflow file.</p>}
-    {saved.length > 0 && <section className="card pad"><div className="ch"><h2>Automations</h2><span className="sample-badge">SAMPLE DATA</span></div>{saved.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.impactAed ? `AED ${item.impactAed.toLocaleString("en-AE")}. ` : ""}{item.runs.map((run) => run.note).join(" ") || "No runs yet."}</small></span><span><button type="button" className="btn sm ghost" onClick={async () => { await api("/api/brain/automation/toggle", { id: item.id }); await reload(); }}>{item.enabled ? "On" : "Off"}</button> <button type="button" className="btn sm" onClick={async () => { await api("/api/brain/automation/run", { id: item.id }); await reload(); }}>Simulated run</button></span></div>)}</section>}
-    <section className="card pad"><div className="ch"><h2>Partner departments</h2></div>{partners.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.confirmed ? "Confirmed" : "Not confirmed"}</small></span><span className={item.confirmed ? "state-chip done" : "state-chip wait"}>{item.confirmed ? "Live" : "Waiting"}</span></div>)}</section>
-  </>;
+  const spec = map ? processSpec(map) : null;
+  return <div className="board">
+    {spec ? <div className="chart-card span-12"><LiveChart spec={spec} /></div> : <p className="note span-12">Ingest the demo sources to load this department’s workflow file.</p>}
+    {process && map?.flows?.filter((flow) => flow.steps.length).map((flow) => <section className="card pad span-12" key={flow.title}><h2>{flow.title}</h2><p className="note">{flow.weeklyHours} h / week in the sample workflow file.</p><ol className="step-list">{flow.steps.map((step, index) => <li key={step}><b>{index + 1}.</b> <span>{sentence(step)}</span>{isBottleneck(step, map.friction || []) && <span className="badge low">▼ Bottleneck</span>}</li>)}</ol></section>)}
+    {map?.proposals?.length ? <section className="card pad span-12"><div className="ch"><h2>Proposed automations</h2><span className="badge neutral">Sample</span></div><div className="fixes">{map.proposals.map((item) => <article className="fix" key={item.id}><h3>{item.name}</h3><ol className="step-list">{(item.steps || []).slice(0, 5).map((step, index) => <li key={step}><b>{index + 1}.</b> <span>{sentence(step)}</span></li>)}</ol><p className="note">{item.hoursSavedPerMonth} h / month. Tools: {item.tools?.join(", ") || "department checklist"}.</p><div className="impact">{item.impactAed == null ? "—" : `${formatFull(item.impactAed, "AED")} / month`}</div><p>{item.revenueAngle}</p><details className="how"><summary>How we calculated</summary><p>{item.assumption}. {item.formula}. {item.aedFormula}</p></details>{state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/automation", item); await reload(); }}>Build automation</button>}</article>)}</div></section> : null}
+    {saved.length > 0 && <section className="card pad span-12"><div className="ch"><h2>Automations</h2><span className="badge neutral">Sample</span></div>{saved.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.impactAed ? `${formatFull(item.impactAed, "AED")} / month. ` : ""}{item.runs.map((run) => run.note).join(" ") || "No runs yet."}</small></span><span><button type="button" className="btn ghost" onClick={async () => { await api("/api/brain/automation/toggle", { id: item.id }); await reload(); }}>{item.enabled ? "On" : "Off"}</button> <button type="button" className="btn" onClick={async () => { await api("/api/brain/automation/run", { id: item.id }); await reload(); }}>Simulated run</button></span></div>)}</section>}
+    <section className="card pad span-12"><div className="ch"><h2>Partner departments</h2></div>{partners.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.confirmed ? "Confirmed" : "Not confirmed"}</small></span><span className={item.confirmed ? "badge success" : "badge neutral"}>{item.confirmed ? "Confirmed" : "Waiting"}</span></div>)}</section>
+  </div>;
+}
+
+function processSpec(map: NonNullable<Access["workflowMaps"]>[string]): ChartSpec {
+  const series = map.flows.filter((flow) => flow.steps.length).flatMap((flow) => {
+    const each = flow.weeklyHours / Math.max(1, flow.steps.length);
+    return flow.steps.map((step) => ({ name: step, value: Math.round(each * 10) / 10, belowTarget: isBottleneck(step, map.friction || []), statusLabel: "Bottleneck" }));
+  }).sort((left, right) => right.value - left.value);
+  const top = series[0];
+  return { id: "chart-process-hours", type: "bar", title: "Hours per week by step", unit: "h", sample: true, span: 12, series, aria: top ? `Hours per week by step. Highest: ${top.name} ${top.value} h.` : "Hours per week by step." };
+}
+
+function sentence(value: string) {
+  const text = value.replace(/\.$/, "").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
 function isBottleneck(step: string, friction: string[]) {
@@ -433,27 +503,31 @@ function isBottleneck(step: string, friction: string[]) {
   return words.some((word) => text.includes(word.slice(0, 7)));
 }
 
-const PROMPTS = ["Revenue by service line, last 6 months", "Deals at risk", "Department utilisation", "Where can we make AED 1M more?"];
+type ChatLine = { who: string; text?: string; bullets?: { label: string; value: number; unit?: string }[]; steps?: { tool: string; detail: string }[]; chartId?: string; chartLabel?: string; error?: boolean; retry?: string };
 
-function ChatDock({ area = "brain", departmentId, onResult }: { area?: string; departmentId?: string; onResult?: (result: { chart?: NonNullable<Access["pins"]>[number]; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[]; answer?: string }) => void }) {
-  const [open, setOpen] = useState(false);
+function ChatDock({ open, onToggle, role, area, departmentId, onResult }: { open: boolean; onToggle: () => void; role: "customer" | "dev"; area: string; departmentId?: string; onResult: (result: Insight) => void }) {
   const [text, setText] = useState("");
-  const [lines, setLines] = useState<{ who: string; text: string; cite?: string }[]>([{ who: "BusinessBrain", text: "Ask about a document you indexed. I cite the passage or I say there is no match.", cite: "Prototype retrieval · no base model" }]);
+  const [asking, setAsking] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [lines, setLines] = useState<ChatLine[]>([{ who: "BusinessBrain", text: "Ask a question about your business. Charts update with the answer." }]);
+  const showThread = open || sheet;
   async function ask(event?: React.FormEvent, preset?: string) {
     event?.preventDefault();
     const question = (preset || text).trim();
-    if (!question) return;
+    if (!question || asking) return;
     setText("");
-    setOpen(true);
-    setLines((prev) => [...prev, { who: "You", text: question }]);
+    setSheet(true);
+    if (!open) onToggle();
+    setAsking(true);
+    window.dispatchEvent(new CustomEvent("bos-pending", { detail: true }));
+    setLines((prev) => [...prev, { who: "You", text: question }, { who: "BusinessBrain", text: "Analysing…" }]);
     const steps: { tool: string; detail: string }[] = [];
     try {
       const response = await fetch("/api/brain/ask", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/x-ndjson" }, body: JSON.stringify({ question, area, departmentId }) });
       if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("ndjson")) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Request failed");
-        onResult?.(result);
-        setLines((prev) => [...prev, { who: "BusinessBrain", text: result.answer }]);
+        finish(result, steps, question);
         return;
       }
       const reader = response.body.getReader();
@@ -468,17 +542,48 @@ function ChatDock({ area = "brain", departmentId, onResult }: { area?: string; d
         for (const part of parts) {
           if (!part.trim()) continue;
           const event = JSON.parse(part);
-          if (event.type === "step") { steps.push(event.step); onResult?.({ steps: [...steps] }); }
-          if (event.type === "done") {
-            onResult?.({ ...event, steps });
-            setLines((prev) => [...prev, { who: "BusinessBrain", text: event.answer || event.error, cite: event.citations?.[0] ? `${event.citations[0].document}: ${event.citations[0].excerpt}` : undefined }]);
-          }
+          if (event.type === "step") steps.push(event.step);
+          if (event.type === "done") finish(event, steps, question);
         }
       }
-    } catch (reason) { setLines((prev) => [...prev, { who: "BusinessBrain", text: (reason as Error).message }]); }
+    } catch {
+      setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: "Couldn't get an answer. Your dashboard hasn't changed.", error: true, retry: question }));
+    } finally {
+      setAsking(false);
+      window.dispatchEvent(new CustomEvent("bos-pending", { detail: false }));
+    }
   }
-  return <>
-    {open && <section className="card pad" aria-label="BusinessBrain transcript"><div className="log">{lines.map((line, index) => <div className="chatline" key={index}><b>{line.who}</b><div>{line.text}</div>{line.cite && <small>{line.cite}</small>}</div>)}</div></section>}
-    <section className="chatdock" aria-label="BusinessBrain chat"><div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="btn ghost sm" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div><form className="ask" onSubmit={ask}><button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide chat" : "Show chat"}</button><input aria-label="Question" value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask BusinessBrain" /><button className="btn" type="submit">Ask</button></form></section>
-  </>;
+  function finish(result: Insight, steps: { tool: string; detail: string }[], question: string) {
+    if (result.error) {
+      setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: "Couldn't get an answer. Your dashboard hasn't changed.", error: true, retry: question }));
+      return;
+    }
+    if (!result.refused) onResult({ ...result, steps });
+    const chartLabel = result.view ? filterLabel(result.view) : "";
+    setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: result.bullets?.length ? undefined : result.answer, bullets: result.bullets, steps: role === "dev" ? steps : undefined, chartId: result.refused ? undefined : chartIdFor(result.view || "revenue"), chartLabel: result.refused ? undefined : chartLabel }));
+  }
+  return <aside className={`chat-panel ${sheet ? "sheet-open" : ""}`} aria-label="BusinessBrain chat">
+    <header className="chat-head">
+      <b>BusinessBrain</b>
+      <button type="button" className="btn ghost sm" onClick={() => { setLines([{ who: "BusinessBrain", text: "Ask a question about your business. Charts update with the answer." }]); }}>New conversation</button>
+      <button type="button" className="btn ghost sm" aria-expanded={open} onClick={onToggle}>{open ? "Collapse" : "Ask BusinessBrain"}</button>
+    </header>
+    {showThread && <div className="chat-log">{lines.map((line, index) => <article className={line.who === "You" ? "bubble you" : "bubble"} key={index}>
+      {line.who !== "You" && <span className="avatar" aria-hidden="true">EC</span>}
+      <div>
+        {line.text === "Analysing…" ? <div className="skeleton lines" aria-live="polite"><span /><span /><span /><small>Analysing…</small></div> : null}
+        {line.bullets?.length ? <ul className="figure-list">{line.bullets.slice(0, 5).map((item) => <li key={item.label}><span>{item.label}</span><b>{formatFull(Number(item.value), item.unit)}</b></li>)}</ul> : line.text && line.text !== "Analysing…" ? <p>{line.text}</p> : null}
+        {line.chartId && <button type="button" className="chip" onClick={() => document.getElementById(line.chartId || "")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Updated: {line.chartLabel}</button>}
+        {line.chartId && <button type="button" className="linkish" onClick={() => window.dispatchEvent(new Event("bos-undo"))}>Undo</button>}
+        {line.error && line.retry && <button type="button" className="btn ghost sm" onClick={() => ask(undefined, line.retry)}>Try again</button>}
+        {role === "dev" && line.steps?.length ? <details className="trace"><summary>How this answer was produced</summary><ol>{line.steps.map((step, stepIndex) => <li key={stepIndex}><b>{step.tool}</b> {step.detail}</li>)}</ol></details> : null}
+      </div>
+    </article>)}
+    {(lines.length <= 1 || lines[lines.length - 1]?.who === "BusinessBrain") && !asking && <div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="chip" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div>}
+    </div>}
+    <form className="ask" onSubmit={ask}>
+      <textarea aria-label="Question" rows={1} value={text} placeholder="Ask about revenue, pipeline or utilisation" onFocus={() => setSheet(true)} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} />
+      <button className="btn" type="submit" disabled={asking}>Ask</button>
+    </form>
+  </aside>;
 }

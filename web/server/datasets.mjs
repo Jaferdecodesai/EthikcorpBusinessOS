@@ -104,19 +104,178 @@ function round(value) {
   return Math.round(value);
 }
 
+const ALLOWED_CHARTS = new Set(["bar", "column", "stacked_column", "grouped_bar", "donut", "pie", "kpi", "bullet"]);
+
+export function coerceChartType(type) {
+  if (type === "line" || type === "area") return "column";
+  if (type === "funnel" || type === "flow" || type === "table" || type === "sparkline") return "bar";
+  return ALLOWED_CHARTS.has(type) ? type : "bar";
+}
+
 export function buildChart(rows, options) {
-  const type = options.type || "bar";
+  const requested = options.type || "bar";
+  const type = coerceChartType(requested);
+  const unit = options.unit || "AED";
+  const monthly = (rows || []).filter((row) => row.month || row.month_label);
   let spec;
-  if (type === "line" || type === "area") {
-    const months = [...new Set(rows.map((row) => row.month_label || row.month))];
-    const names = [...new Set(rows.map((row) => row.service_line || row[options.series]))];
-    spec = { id: `chart-${type}-${months.join("-")}`, type, title: options.title, sample: true, unit: options.unit || "AED", categories: months, series: names.map((name, index) => ({ name, color: index % 3, values: months.map((month) => { const found = rows.find((row) => (row.month_label || row.month) === month && (row.service_line || row[options.series]) === name); return found ? Number(found.revenue_aed || found.value) || 0 : 0; }) })) };
-  } else if (type === "funnel" || type === "donut" || type === "bar") {
-    spec = { id: `chart-${type}-${rows.length}-${options.title}`, type, title: options.title, sample: true, unit: options.unit || "AED", series: rows.map((row) => ({ name: String(row.stage || row.service_line || row.department || row.label || ""), value: Number(row.value ?? row.value_aed ?? row.utilisation_pct) || 0 })) };
-  } else if (type === "table" || type === "kpi") spec = { id: `chart-${type}-${options.title}`, type, title: options.title, sample: true, unit: options.unit || "", series: rows };
-  else spec = { id: "chart-flow", type: "flow", title: options.title, sample: true, series: rows };
+  if ((type === "column" || type === "stacked_column" || type === "grouped_bar") && monthly.length) spec = monthlyChart(monthly, type, options, unit);
+  else if (type === "kpi") spec = { id: `chart-kpi-${options.title}`, type: "kpi", title: options.title, sample: true, unit: options.unit || "", series: rows };
+  else spec = categoryChart(rows || [], type === "column" ? "bar" : type, options, unit);
   spec.summary = chartSummary(spec);
   return spec;
+}
+
+function monthlyChart(rows, type, options, unit) {
+  const months = [...new Set(rows.map((row) => row.month_label || row.month))];
+  const names = [...new Set(rows.map((row) => row.service_line || row[options.series]).filter(Boolean))];
+  if (type === "column" || names.length <= 1) {
+    return { id: `chart-column-${months.join("-")}`, type: "column", title: options.title, sample: true, unit, categories: months, series: [{ name: "Revenue", values: months.map((month) => rows.filter((row) => (row.month_label || row.month) === month).reduce((sum, row) => sum + (Number(row.revenue_aed || row.value) || 0), 0)) }] };
+  }
+  const ranked = names.map((name) => ({ name, total: rows.filter((row) => (row.service_line || row[options.series]) === name).reduce((sum, row) => sum + (Number(row.revenue_aed || row.value) || 0), 0) })).sort((left, right) => right.total - left.total);
+  const head = ranked.slice(0, 5);
+  const rest = ranked.slice(5);
+  const seriesNames = rest.length ? [...head.map((item) => item.name), "Other"] : head.map((item) => item.name);
+  return { id: `chart-${type}-${months.join("-")}`, type: type === "grouped_bar" ? "grouped_bar" : "stacked_column", title: options.title, sample: true, unit, categories: months, series: seriesNames.map((name) => ({ name, values: months.map((month) => rows.filter((row) => (row.month_label || row.month) === month && (name === "Other" ? rest.some((item) => item.name === (row.service_line || row[options.series])) : (row.service_line || row[options.series]) === name)).reduce((sum, row) => sum + (Number(row.revenue_aed || row.value) || 0), 0)) })) };
+}
+
+function categoryChart(rows, type, options, unit) {
+  const series = rows.map((row) => ({ name: String(row.stage || row.service_line || row.department || row.label || row.name || ""), value: Number(row.value ?? row.value_aed ?? row.utilisation_pct ?? row.impactAed) || 0 })).filter((item) => item.name);
+  series.sort((left, right) => right.value - left.value);
+  const capped = capCategories(series, type === "donut" || type === "pie" ? 6 : 10);
+  const chartType = type === "pie" ? "donut" : (type === "bullet" ? "bullet" : type === "donut" ? "donut" : "bar");
+  return { id: `chart-${chartType}-${capped.length}-${options.title}`, type: chartType, title: options.title, sample: true, unit, series: capped };
+}
+
+function capCategories(series, max) {
+  if (series.length <= max) return series;
+  const head = series.slice(0, max - 1);
+  const rest = series.slice(max - 1);
+  head.push({ name: "Other", value: rest.reduce((sum, item) => sum + item.value, 0) });
+  return head;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function monthName(month) {
+  const [year, mon] = String(month || "").split("-");
+  return `${MONTHS[Number(mon) - 1] || month} ${year || ""}`.trim();
+}
+
+function periodLabel(list) {
+  if (!list.length) return "No period";
+  if (list.length === 1) return monthName(list[0]);
+  return `${monthName(list[0])}–${monthName(list[list.length - 1])}`;
+}
+
+export function projectModel(datasets) {
+  const revenueRows = datasets?.revenue?.rows || [];
+  const hourRows = datasets?.hours?.rows || [];
+  const pipelineRows = datasets?.pipeline?.rows || [];
+  const targetRows = datasets?.targets?.rows || [];
+  const openStages = ["Discovery", "Qualification", "Proposal", "Negotiation"];
+  const won = pipelineRows.filter((row) => row.stage === "Closed Won");
+  const lost = pipelineRows.filter((row) => row.stage === "Closed Lost");
+  const open = pipelineRows.filter((row) => openStages.includes(row.stage));
+  const stages = new Map();
+  const risk = new Map();
+  for (const row of pipelineRows) stages.set(row.stage, (stages.get(row.stage) || 0) + (Number(row.value_aed) || 0));
+  for (const row of open.filter((item) => Number(item.win_probability_pct) < 40)) risk.set(row.stage, (risk.get(row.stage) || 0) + (Number(row.value_aed) || 0));
+  const closedValue = won.reduce((sum, row) => sum + Number(row.value_aed), 0) + lost.reduce((sum, row) => sum + Number(row.value_aed), 0);
+  return {
+    ready: revenueRows.length > 0,
+    revenue: revenueRows.map((row) => ({ month: row.month, label: row.month_label || monthName(row.month), line: row.service_line, value: Number(row.revenue_aed) || 0 })),
+    hours: hourRows.map((row) => ({ department: row.department, hours: Number(row.hours_utilized_oct_2026) || 0, available: Number(row.hours_available_oct_2026) || 0, billable: Number(row.billable_hours_oct_2026) || 0 })),
+    stages: [...stages.entries()].map(([name, value]) => ({ name, value: Math.round(value) })),
+    risk: [...risk.entries()].map(([name, value]) => ({ name, value: Math.round(value) })),
+    winRate: won.length + lost.length ? Math.round((won.length / (won.length + lost.length)) * 1000) / 10 : null,
+    winRateValue: closedValue ? Math.round((won.reduce((sum, row) => sum + Number(row.value_aed), 0) / closedValue) * 1000) / 10 : null,
+    weighted: Math.round(open.reduce((sum, row) => sum + Number(row.value_aed) * Number(row.win_probability_pct) / 100, 0)),
+    targets: targetRows.map((row) => ({ metric: row.metric, subject: row.subject, value: Number(row.target_value), unit: row.unit, goodDirection: row.good_direction || "up" }))
+  };
+}
+
+function findTarget(model, metric, subject) {
+  const found = (model.targets || []).find((row) => row.metric === metric && row.subject === subject);
+  return found ? found.value : null;
+}
+
+export function buildOverview(model, options = {}) {
+  if (!model?.ready) return { ready: false, kpis: [], charts: [], periods: [], currency: "AED" };
+  const months = [...new Set(model.revenue.map((row) => row.month))].filter(Boolean).sort();
+  const periods = [
+    { id: "last-6", months: months.slice(-6) },
+    { id: "ttm", months },
+    { id: "2026-10", months: months.filter((month) => month === "2026-10") },
+    { id: "2026-q3", months: months.filter((month) => month >= "2026-07" && month <= "2026-09") }
+  ].filter((item) => item.months.length).map((item) => ({ ...item, label: periodLabel(item.months) }));
+  const period = periods.find((item) => item.id === options.period) || periods[0];
+  const rows = model.revenue.filter((row) => period.months.includes(row.month));
+  const mode = options.mode || "revenue";
+  return { ready: true, period: period.id, periodLabel: period.label, periods: periods.map(({ id, label }) => ({ id, label })), mode, currency: "AED", sample: true, kpis: overviewKpis(model, rows, period), charts: overviewCharts(model, rows, period, mode, options.actions || []) };
+}
+
+function overviewKpis(model, rows, period) {
+  const total = Math.round(rows.reduce((sum, row) => sum + row.value, 0));
+  const byMonth = period.months.map((month) => Math.round(rows.filter((row) => row.month === month).reduce((sum, row) => sum + row.value, 0)));
+  const change = byMonth[0] ? Math.round(((byMonth[byMonth.length - 1] - byMonth[0]) / byMonth[0]) * 1000) / 10 : null;
+  const revenueTarget = period.id === "last-6" ? findTarget(model, "revenue", "Company") : (findTarget(model, "monthly_revenue", "Company") || 0) * (period.months.length || 1) || null;
+  const available = model.hours.reduce((sum, row) => sum + row.available, 0);
+  const utilised = model.hours.reduce((sum, row) => sum + row.hours, 0);
+  const utilisation = available ? Math.round((utilised / available) * 1000) / 10 : null;
+  return [
+    kpiTile("revenue", "Revenue", total, "AED", change, monthName(period.months[0]), revenueTarget, "revenue", "Recognised revenue in the selected period."),
+    kpiTile("utilisation", "Utilisation", utilisation, "%", null, "October 2026", findTarget(model, "utilisation_pct", "Company"), "utilisation", "Utilised hours divided by available hours for October 2026."),
+    kpiTile("pipeline", "Weighted pipeline", model.weighted, "AED", null, "", findTarget(model, "weighted_pipeline", "Company"), "pipeline", "Open pipeline value times the win probability already in the file."),
+    kpiTile("win-rate", "Win rate", model.winRate, "%", null, "", findTarget(model, "win_rate_count", "Company"), "pipeline", "Closed won deals divided by closed won and closed lost deals.")
+  ];
+}
+
+function kpiTile(id, label, value, unit, change, compare, target, mode, definition) {
+  const measured = value != null && !Number.isNaN(Number(value));
+  const numericTarget = target == null ? null : Number(target);
+  const below = measured && numericTarget != null && Number(value) < numericTarget;
+  const status = !measured ? "not-measured" : numericTarget == null ? "no-target" : below ? "below-target" : "on-target";
+  const pct = measured && numericTarget ? Math.round((Number(value) / numericTarget) * 100) : null;
+  const delta = !measured ? null : { change, compare: compare || "", tone: status === "below-target" ? "low" : change > 0 ? "good" : "neutral" };
+  return { id, label, value: measured ? Number(value) : null, unit, delta, target: numericTarget, pctOfTarget: pct, status, mode, definition };
+}
+
+function overviewCharts(model, rows, period, mode, actions) {
+  const lineSeries = capCategories([...new Map(rows.map((row) => [row.line, 0])).keys()].map((name) => {
+    const value = Math.round(rows.filter((row) => row.line === name).reduce((sum, row) => sum + row.value, 0));
+    const monthly = findTarget(model, "monthly_revenue", name);
+    const target = monthly == null ? null : monthly * period.months.length;
+    return { name, value, target, belowTarget: target != null && value < target };
+  }).sort((left, right) => right.value - left.value), 10);
+  const monthTarget = findTarget(model, "monthly_revenue", "Company");
+  const monthSeries = period.months.map((month) => {
+    const value = Math.round(rows.filter((row) => row.month === month).reduce((sum, row) => sum + row.value, 0));
+    const full = rows.find((row) => row.month === month)?.label || monthName(month);
+    return { name: full.slice(0, 3), value, belowTarget: monthTarget != null && value < monthTarget };
+  });
+  const lines = chartSpec("chart-revenue-lines", "bar", `Revenue by service line, ${period.label}`, "AED", lineSeries, 6);
+  const columns = { ...chartSpec("chart-revenue-months", "column", `Revenue by month, ${period.label}`, "AED", monthSeries, 6), target: monthTarget, targetLabel: monthTarget == null ? "" : "Target" };
+  if (mode === "utilisation") {
+    const series = model.hours.map((row) => {
+      const value = row.available ? Math.round((row.hours / row.available) * 1000) / 10 : 0;
+      const target = findTarget(model, "utilisation_pct", row.department);
+      return { name: row.department, value, target, belowTarget: target != null && value < target };
+    }).sort((left, right) => right.value - left.value);
+    return [chartSpec("chart-utilisation", "bar", "Utilisation by department, October 2026", "%", series, 12)];
+  }
+  if (mode === "pipeline") return [chartSpec("chart-pipeline", "bar", "Pipeline by stage", "AED", capCategories(model.stages.map((row) => ({ name: row.name, value: row.value, belowTarget: false })).sort((left, right) => right.value - left.value), 10), 12)];
+  if (mode === "risk") return [chartSpec("chart-risk", "bar", "Open pipeline below 40% probability", "AED", model.risk.map((row) => ({ name: row.name, value: row.value, belowTarget: false })), 12)];
+  if (mode === "actions") return [chartSpec("chart-actions", "bar", "Revenue actions", "AED", actions.slice(0, 5).map((item) => ({ name: item.title, value: item.impactAed || 0, belowTarget: false })), 12)];
+  if (mode === "donut") {
+    const slices = lineSeries.length > 5 ? [...lineSeries.slice(0, 5), { name: "Other", value: lineSeries.slice(5).reduce((sum, item) => sum + item.value, 0), belowTarget: false }] : lineSeries;
+    return [{ ...chartSpec("chart-revenue-share", "donut", `Share of revenue, ${period.label}`, "AED", slices, 6), total: lineSeries.reduce((sum, item) => sum + item.value, 0) }, columns];
+  }
+  return [lines, columns];
+}
+
+function chartSpec(id, type, title, unit, series, span) {
+  const top = series[0];
+  return { id, type, title, unit, sample: true, span, series, aria: top ? `${title}. Highest: ${top.name} ${top.value} ${unit}.` : `${title}. No rows.` };
 }
 
 export function chartSummary(spec) {
