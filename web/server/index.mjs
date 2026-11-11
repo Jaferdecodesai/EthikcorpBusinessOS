@@ -125,8 +125,12 @@ const server = http.createServer(async (req, res) => {
       });
     }
     const requested = decodeURIComponent((req.url || "/").split("?")[0]);
-    const file = path.resolve(root, "dist", requested === "/" ? "index.html" : requested.replace(/^\//, ""));
-    if (!file.startsWith(path.join(root, "dist") + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return json(res, 404, { error: "Not found." });
+    const relative = requested === "/" ? "index.html" : requested.replace(/^\//, "");
+    const file = ["dist", "public"].map((folder) => ({ folder, candidate: path.resolve(root, folder, relative) })).find(({ folder, candidate }) => {
+      const base = path.join(root, folder) + path.sep;
+      return candidate.startsWith(base) && fs.existsSync(candidate) && fs.statSync(candidate).isFile();
+    })?.candidate;
+    if (!file) return json(res, 404, { error: "Not found." });
     res.writeHead(200, { "Content-Type": mime[path.extname(file)] || "application/octet-stream", "X-Content-Type-Options": "nosniff" });
     fs.createReadStream(file).pipe(res);
   } catch (error) {
