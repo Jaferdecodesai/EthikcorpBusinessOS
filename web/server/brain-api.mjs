@@ -1,8 +1,8 @@
-import { parseWorkbook, validateOwnership } from "../phase1/customer-logic.mjs";
+import { ownershipTemplate, parseWorkbook, validateOwnership } from "../phase1/customer-logic.mjs";
 import { connectorStatus, emptyBrain, ingestDocument, portalAccess, residency } from "./brain-pipeline.mjs";
 import { analyzeRevenue, projectModel } from "./datasets.mjs";
 import { runAgent } from "./agent.mjs";
-import { DEMO_DRIVE, DEMO_GITHUB, demoPlan, ingestDemoFile } from "./demo-intake.mjs";
+import { DEMO_DRIVE, DEMO_GITHUB, buildFromDemo, demoPlan, ingestDemoFile } from "./demo-intake.mjs";
 import { llmStatus } from "./llm/status.mjs";
 import { buildSemanticLayer } from "./semantic.mjs";
 
@@ -13,7 +13,7 @@ function finetuneStatus(instruction) {
 
 export function publicBrain(brain, role, connectors, env = {}) {
   const current = brain || emptyBrain();
-  const access = portalAccess(role, current);
+  const access = portalAccess(role, current, env);
   const analysis = analyzeRevenue(current.datasets || {});
   return {
     ...access,
@@ -38,9 +38,27 @@ export function publicBrain(brain, role, connectors, env = {}) {
   };
 }
 
+const PIPELINE_APIS = new Set(["/api/brain/bootstrap-dev", "/api/brain/demo/plan", "/api/brain/demo/file", "/api/brain/documents", "/api/brain/confirm", "/api/brain/automation", "/api/brain/automation/toggle", "/api/brain/automation/run", "/api/brain/ownership-sample"]);
+
+function portalMode(env) {
+  return env?.PORTAL_MODE === "customer" || env?.PORTAL_MODE === "aqionteam" ? env.PORTAL_MODE : "production";
+}
+
+export function demoOwnershipRows() {
+  return ownershipTemplate().map((row) => ({ ...row, ownerName: "Demo owner", dueDate: "2026-12-01", authority: "Authoritative", notForAi: row.notForAi ? "Yes" : "No" }));
+}
+
 export async function handleBrain(brain, { method, pathname, body, role, sessionId, secret, connectors, env, fetchImpl, onStep }) {
+  const mode = portalMode(env);
   const current = brain || emptyBrain();
-  if (method === "GET" && pathname === "/api/brain/state") return { brain: current, status: 200, data: publicBrain(current, role, connectors, env) };
+  const effective = mode === "customer" ? "customer" : role;
+  if (mode === "customer" && (PIPELINE_APIS.has(pathname) || (pathname === "/api/brain/claim" && body?.trustedRole === "dev"))) {
+    return { brain: current, status: 403, data: { error: "This customer portal does not expose the development view or the build pipeline.", portalMode: "customer", role: "customer" } };
+  }
+  if (mode === "aqionteam" && effective !== "dev" && pathname !== "/api/brain/claim" && pathname !== "/api/brain/bootstrap-dev") {
+    return { brain: current, status: 401, data: { error: "The Aqion team portal needs a team invite.", portalMode: "aqionteam" } };
+  }
+  if (method === "GET" && pathname === "/api/brain/state") return { brain: current, status: 200, data: publicBrain(current, effective, connectors, env) };
   if (method === "POST" && pathname === "/api/brain/claim") {
     if (body.trustedRole !== "dev" && body.trustedRole !== "customer") return { brain: current, status: 401, data: { error: "That invite is not valid." } };
     return { brain: { ...current, roles: { ...current.roles, [sessionId]: body.trustedRole } }, status: 200, data: { role: body.trustedRole } };
@@ -53,8 +71,12 @@ export async function handleBrain(brain, { method, pathname, body, role, session
     const parsed = body.xlsxBase64 ? await parseWorkbook(Uint8Array.from(atob(body.xlsxBase64), (char) => char.charCodeAt(0))) : { ok: true, rows: body.rows || [] };
     const result = validateOwnership(parsed);
     if (!result.ok) return { brain: current, status: 422, data: { ok: false, errors: result.errors } };
-    const next = { ...current, ownershipReady: true, ownership: result.rows };
-    return { brain: next, status: 200, data: publicBrain(next, role, connectors, env) };
+    let next = { ...current, ownershipReady: true, ownership: result.rows };
+    if (portalMode(env) === "customer") {
+      try { next = await buildFromDemo(next, fetchImpl || fetch); }
+      catch (error) { next = { ...next, demo: { ...(next.demo || {}), drive: { status: "pending", detail: error.message || "The build could not start." } } }; }
+    }
+    return { brain: next, status: 200, data: publicBrain(next, effective, connectors, env) };
   }
   if (method === "POST" && pathname === "/api/brain/demo/plan") {
     const plan = await demoPlan(fetchImpl || fetch);
@@ -74,7 +96,7 @@ export async function handleBrain(brain, { method, pathname, body, role, session
     return { brain: result.brain, status: 200, data: publicBrain(result.brain, role, connectors, env) };
   }
   if (method === "POST" && pathname === "/api/brain/ask") {
-    const access = portalAccess(role, current);
+    const access = portalAccess(role, current, env);
     const area = body.area === "bots" ? "bots" : "brain";
     if (!access.tabs.find((tab) => tab.id === area)?.enabled) return { brain: current, status: 403, data: { error: area === "bots" ? "Ethikcorp Businessbots are still being built." : "Ethikcorp BusinessBrain is still building." } };
     const data = await runAgent(current, body.question || "", { ai: env?.AI, departmentId: body.departmentId, onStep });
@@ -110,6 +132,13 @@ export async function handleBrain(brain, { method, pathname, body, role, session
     if (!body.id) return { brain: current, status: 400, data: { error: "Name the department." } };
     const next = { ...current, confirmed: { ...current.confirmed, [body.id]: true } };
     return { brain: next, status: 200, data: publicBrain(next, role, connectors, env) };
+  }
+  if (method === "POST" && pathname === "/api/brain/ownership-sample") {
+    if (portalMode(env) !== "aqionteam") return { brain: current, status: 403, data: { error: "The demo ownership sample is only available on the Aqion team portal." } };
+    const result = validateOwnership({ ok: true, rows: demoOwnershipRows() });
+    if (!result.ok) return { brain: current, status: 422, data: { ok: false, errors: result.errors } };
+    const next = { ...current, ownershipReady: true, ownership: result.rows };
+    return { brain: next, status: 200, data: publicBrain(next, "dev", connectors, env) };
   }
   if (method === "GET" && pathname === "/api/brain/connectors") return { brain: current, status: 200, data: connectorStatus(connectors) };
   return { brain: current, status: 404, data: { error: "Unknown brain endpoint." } };

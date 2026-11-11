@@ -64,6 +64,18 @@ export async function probeDrive(fetchImpl, manifest) {
   } catch { return { status: "pending", detail: "Drive access pending" }; }
 }
 
+export async function buildFromDemo(brain, fetchImpl = fetch) {
+  const plan = await demoPlan(fetchImpl);
+  let next = { ...brain, demo: { ...(brain.demo || {}), github: plan.github, driveUrl: plan.driveUrl, drive: plan.drive, sha: plan.sha, driveIndex: plan.driveIndex, filesTotal: plan.files.length, filesDone: 0, log: brain.demo?.log || [] } };
+  for (const file of plan.files) {
+    try {
+      const result = await ingestDemoFile(next, file.path, fetchImpl);
+      next = result.brain || next;
+    } catch { /* one bad file does not undo Step 1 */ }
+  }
+  return next;
+}
+
 export async function ingestDemoFile(brain, filePath, fetchImpl = fetch) {
   const disposition = fileDisposition(filePath);
   const fetchedAt = new Date().toISOString();

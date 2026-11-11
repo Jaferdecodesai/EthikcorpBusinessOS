@@ -17,7 +17,8 @@ test("the portal shell does not mount the customer guide rail", () => {
 });
 
 test("the customer sidebar names the three BusinessOS areas", () => {
-  assert.match(product, /BusinessBrain Builder/);
+  assert.match(product, /BusinessBrain PM/);
+  assert.match(product, /#builder/);
   assert.match(product, /Ethikcorp BusinessBrain/);
   assert.match(product, /Ethikcorp Businessbots/);
 });

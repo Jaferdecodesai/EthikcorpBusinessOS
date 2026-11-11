@@ -1,7 +1,7 @@
 # Ethikcorp BusinessOS — Premium dashboard redesign: build spec
 
 **For:** the coding agent (handed over by the AqionLLM Business Brain bot) · **Requested by:** Jafer Mohammed · **Date:** 11 Nov 2026
-**Scope:** the CEO BusinessBrain dashboard, one department Businessbot page, and the BusinessBrain Builder pipeline and data-quality page. Each has rules for desktop (1440), laptop (1280) and mobile (390).
+**Scope:** the CEO BusinessBrain dashboard, one department Businessbot page, and the BusinessBrain PM pipeline and data-quality page. Each has rules for desktop (1440), laptop (1280) and mobile (390).
 **Reference mockup (built from this spec):** `/workspace/figma-brief/redesign/ceo-dashboard.html` → `ceo-desktop-1440.png`, `ceo-laptop-1280.png`, `ceo-mobile-390.png`, `preview.jpg`. The generator and CSS are in `redesign/_build/` (`styles.css` holds every token below as working CSS).
 **Supersedes:** the sidebar, chat-dock placement and categorical palette in `/workspace/critique/critique-spec.md`. Its other rules (number formatting, states, no line/area charts, neutral badges) still apply unless this file says otherwise.
 
@@ -246,7 +246,7 @@ All values were sampled with PIL from `old-sidebar-live.jpg` (1320×926).
 | Nav text | cap height 9 | **13/16, 500** (active 600), single line, ellipsis | inactive **`#5C5D63`** |
 | **Active item** | pill 194×31, corner ≈ 6 | **216×34, radius 7** | fill **`#49A2E6`**; text **`#00254E`** (5.5:1) |
 | Lime active marker | 2px wide, 16–17px tall, at the sidebar's left edge, vertically centred on the pill | **2×18px, left:0 of the sidebar, top 8px within the item** | **`#DDFB5D`** |
-| Item order | BusinessBrain Builder · Ethikcorp BusinessBrain · Ethikcorp Businessbots | same, no icons, no coloured dots | — |
+| Item order | BusinessBrain PM · Ethikcorp BusinessBrain · Ethikcorp Businessbots | same, no icons, no coloured dots | — |
 | Footer | 1px divider at y≈873; 2 lines of text, left 17 | divider `#131418`, padding **16px 20px 18px**, 11/14 | **`#A0A2A6`** (8.0:1) |
 | Footer copy | "Customer view. Locked areas open from live build progress." | keep the build's current role copy | — |
 
@@ -404,9 +404,9 @@ Same shell, sidebar active item "Ethikcorp Businessbots", breadcrumb "Ethikcorp 
 
 Mobile: KPI 2×2, charts full-width in order, deals table shows Client / Stage / Weighted.
 
-### 6.3 BusinessBrain Builder: pipeline and data quality
+### 6.3 BusinessBrain PM: pipeline and data quality
 
-Sidebar active item "BusinessBrain Builder". This is the screen in `old-sidebar-live.jpg`; its content and states stay, only the layout and tokens change.
+Sidebar active item "BusinessBrain PM". This is the screen in `old-sidebar-live.jpg`; its content and states stay, only the layout and tokens change.
 
 | # | Block | Desktop span | Content |
 |---|---|---|---|
