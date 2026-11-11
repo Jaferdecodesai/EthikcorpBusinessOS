@@ -196,7 +196,7 @@ function Donut({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: str
       </svg>
       <div className="donut-centre">
         <span className="d-cur">AED</span>
-        <span className="d-val num" ref={valueRef}>{compact}</span>
+        <span className="d-val" ref={valueRef}>{compact}</span>
         <span className="d-lab">Total revenue</span>
       </div>
     </div>
