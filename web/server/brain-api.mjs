@@ -4,6 +4,7 @@ import { analyzeRevenue } from "./datasets.mjs";
 import { runAgent } from "./agent.mjs";
 import { DEMO_DRIVE, DEMO_GITHUB, demoPlan, ingestDemoFile } from "./demo-intake.mjs";
 import { llmStatus } from "./llm/status.mjs";
+import { buildSemanticLayer } from "./semantic.mjs";
 
 export function publicBrain(brain, role, connectors, env = {}) {
   const current = brain || emptyBrain();
@@ -15,7 +16,10 @@ export function publicBrain(brain, role, connectors, env = {}) {
     chunks: (current.chunks || []).length,
     connectors: connectorStatus(connectors),
     residency: residency(),
-    finetune: { status: "not_runnable_here", detail: "A LoRA job can be queued for Unsloth or Axolotl outside this Worker. Nothing is training here." },
+    finetune: { status: "not_runnable_here", detail: "Instruction pairs can be written to training/ethikcorp-businessos-instruct.jsonl. No LoRA fine-tune has been run. Unsloth or Axolotl would run outside this Worker." },
+    indexLayer: { retrieval: (current.chunks || []).length ? "built" : "not_built", semantic: current.semantic?.status || "not_built", instructionDataset: "prepared for a later LoRA; not trained", finetune: "not_run" },
+    semantic: current.semantic || buildSemanticLayer(),
+    quality: current.quality || null,
     demo: { github: current.demo?.github || DEMO_GITHUB, driveUrl: current.demo?.driveUrl || DEMO_DRIVE, drive: current.demo?.drive || null, filesTotal: current.demo?.filesTotal || 0, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] },
     datasets: Object.entries(current.datasets || {}).map(([id, table]) => ({ id, rows: table.rows?.length || 0, sample: true })),
     opportunities: analysis.opportunities,
@@ -47,7 +51,7 @@ export async function handleBrain(brain, { method, pathname, body, role, session
   }
   if (method === "POST" && pathname === "/api/brain/demo/plan") {
     const plan = await demoPlan(fetchImpl || fetch);
-    const next = { ...current, demo: { ...(current.demo || {}), github: plan.github, driveUrl: plan.driveUrl, drive: plan.drive, filesTotal: plan.files.length, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] } };
+    const next = { ...current, demo: { ...(current.demo || {}), github: plan.github, driveUrl: plan.driveUrl, drive: plan.drive, sha: plan.sha, driveIndex: plan.driveIndex, needsReingest: Boolean(current.quality?.sha && plan.sha && current.quality.sha !== plan.sha), filesTotal: plan.files.length, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] } };
     return { brain: next, status: 200, data: { ...publicBrain(next, role, connectors, env), files: plan.files } };
   }
   if (method === "POST" && pathname === "/api/brain/demo/file") {

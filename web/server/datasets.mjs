@@ -2,14 +2,27 @@ const OPEN = new Set(["Discovery", "Qualification", "Proposal", "Negotiation"]);
 
 export function queryDataset(datasets, query = {}) {
   const table = datasets?.[query.dataset];
-  if (!table) return { ok: false, error: `Unknown dataset ${query.dataset || ""}.`.trim(), rows: [] };
+  if (!table) return { ok: false, error: `Unknown dataset ${query.dataset || ""}.`.trim(), rows: [], matched: 0, provenance: null };
   let rows = table.rows.slice();
+  const months = [...new Set(rows.map((row) => row.month).filter(Boolean))].sort();
   if (query.lastMonths) {
-    const months = [...new Set(rows.map((row) => row.month))].sort();
     const keep = new Set(months.slice(-Number(query.lastMonths)));
     rows = rows.filter((row) => keep.has(row.month));
   }
+  if (query.from) rows = rows.filter((row) => String(row.month) >= query.from);
+  if (query.to) rows = rows.filter((row) => String(row.month) <= query.to);
+  if (query.quarter) {
+    const [year, quarter] = String(query.quarter).split("-Q");
+    const start = (Number(quarter) - 1) * 3 + 1;
+    const keep = new Set([0, 1, 2].map((offset) => `${year}-${String(start + offset).padStart(2, "0")}`));
+    rows = rows.filter((row) => keep.has(row.month));
+  }
   for (const filter of query.filters || []) rows = rows.filter((row) => match(row, filter));
+  const matched = rows.length;
+  if (query.ratio) {
+    const value = ratioValue(rows, query.ratio);
+    return pack(table, query, [{ metric: query.ratio, value }], matched);
+  }
   if (query.groupBy) {
     const groups = new Map();
     for (const row of rows) {
@@ -19,9 +32,23 @@ export function queryDataset(datasets, query = {}) {
     }
     rows = [...groups.entries()].map(([key, group]) => ({ [query.groupBy]: key, value: aggregate(group, query.aggregate), count: group.length }));
   }
-  if (query.sort) rows.sort((left, right) => Number(right[query.sort] || 0) - Number(left[query.sort] || 0));
+  if (query.sort) rows.sort((left, right) => Number(right[query.sort] ?? right.value ?? 0) - Number(left[query.sort] ?? left.value ?? 0));
   if (query.limit) rows = rows.slice(0, query.limit);
-  return { ok: true, sample: true, dataset: query.dataset, rows, aggregate: query.aggregate || null };
+  return pack(table, query, rows, matched);
+}
+
+function pack(table, query, rows, matched) {
+  const filter = [query.filters?.map((item) => `${item.field} ${item.op} ${[].concat(item.value).join("|")}`).join(" and "), query.from || query.to ? `month ${query.from || ""}..${query.to || ""}` : "", query.quarter || "", query.lastMonths ? `last ${query.lastMonths} months` : "", query.groupBy ? `group by ${query.groupBy}` : "", query.aggregate ? `${query.aggregate.op}(${query.aggregate.field})` : "", query.ratio || "", query.limit ? `top ${query.limit}` : ""].filter(Boolean).join("; ") || "all rows";
+  return { ok: true, sample: Boolean(table.sample), dataset: query.dataset, rows, matched, aggregate: query.aggregate || null, provenance: { file: table.source || query.dataset, rowsUsed: matched, filter, columns: table.columns || [] } };
+}
+
+function ratioValue(rows, ratio) {
+  const utilized = rows.reduce((total, row) => total + (Number(row.hours_utilized_oct_2026) || 0), 0);
+  const available = rows.reduce((total, row) => total + (Number(row.hours_available_oct_2026) || 0), 0);
+  const billable = rows.reduce((total, row) => total + (Number(row.billable_hours_oct_2026) || 0), 0);
+  if (ratio === "billable") return available ? Math.round((billable / available) * 1000) / 10 : 0;
+  if (ratio === "utilisation") return available ? Math.round((utilized / available) * 1000) / 10 : 0;
+  return 0;
 }
 
 function match(row, filter) {

@@ -2,6 +2,7 @@ import { answerFromChunks } from "./brain-pipeline.mjs";
 import { analyzeRevenue, buildChart, queryDataset } from "./datasets.mjs";
 import { proposeAutomations } from "./workflows.mjs";
 import { REGION_LINE, workersAiNarrate, workersAiPlan } from "./llm/status.mjs";
+import { resolveQuestion } from "./semantic.mjs";
 
 const DATASETS = new Set(["revenue", "pipeline", "hours", "clients"]);
 const CHARTS = new Set(["bar", "line", "area", "donut", "funnel", "flow", "kpi", "table"]);
@@ -53,6 +54,13 @@ export async function runAgent(brain, question, options = {}) {
   const steps = [];
   const outputs = [];
   const emit = (step) => { steps.push(step); options.onStep?.(step); };
+  const resolved = resolveQuestion(question, brain.datasets || {});
+  if (resolved) {
+    emit({ tool: "query_dataset", status: "done", detail: resolved.refuse ? "Refused. The tables do not contain an answer." : `${resolved.provenance?.file || "tables"} · ${resolved.provenance?.rowsUsed ?? 0} rows · ${resolved.provenance?.filter || "all rows"}` });
+    const chart = resolved.ok && resolved.rows?.length ? buildChart(resolved.rows.map((row) => ({ label: row.service_line || row.department || row.client_name || row.stage || resolved.label, value: row.value ?? row.revenue_aed ?? row.value_aed ?? resolved.value })), { type: "bar", title: resolved.label, unit: resolved.unit === "AED" ? "AED" : resolved.unit }) : null;
+    if (chart) emit({ tool: "make_chart", status: "done", detail: "Chart uses the same rows as the answer." });
+    return { answer: resolved.answer, steps, chart, fixes: analyzeRevenue(brain.datasets || {}).opportunities.slice(0, 4), citations: [], provenance: resolved.provenance || null, rows: resolved.rows || [], sample: Boolean(brain.datasets?.revenue), refused: Boolean(resolved.refuse), llm: "not_configured", region: REGION_LINE };
+  }
   emit({ tool: "plan", status: "done", detail: planner === "workers-ai" ? `Workers AI planned ${calls.length} tool calls. ${REGION_LINE}` : `Deterministic planner chose ${calls.length} tools. No Workers AI call. ${REGION_LINE}` });
   const context = { rows: [], raw: null };
   for (const call of calls.slice(0, 5)) {

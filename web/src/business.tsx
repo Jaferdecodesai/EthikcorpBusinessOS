@@ -17,7 +17,9 @@ type Access = {
   connectors: { github: { ok: boolean; missing?: string[] }; drive: { ok: boolean; missing?: string[] } };
   residency: { prototype: string; embedding: string; llm: string; production: string };
   finetune: { status: string; detail: string };
-  demo?: { github: string; driveUrl: string; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
+  indexLayer?: { retrieval?: string; semantic?: string };
+  demo?: { github: string; driveUrl: string; sha?: string; needsReingest?: boolean; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
+  quality?: { sha: string; fetchedAt: string; files: Record<string, { path: string; source: string; driveId?: string; rows: number; pass: boolean; schema?: { name: string; type: string }[] }>; cross?: { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } };
   datasets?: { id: string; rows: number }[];
   opportunities?: { id: string; title: string; impactAed: number; formula: string; confidence: string; owner: string }[];
   pins?: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[] }[] }[];
@@ -231,10 +233,16 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
 }
 
 function Outline({ state }: { state: Access }) {
-  const stages = [...Object.entries(state.stages), ["finetune", { status: "held", detail: state.finetune.detail }] as const];
+  const stages: [string, { status: string; detail: string }][] = [
+    ["retrieval", { status: state.indexLayer?.retrieval === "built" ? "done" : "not_started", detail: state.indexLayer?.retrieval === "built" ? "Heading-anchored passages are in the retrieval index." : "No passages are indexed yet." }],
+    ["semantic", { status: state.indexLayer?.semantic === "built" ? "done" : "not_started", detail: "Synonyms, service-line aliases, and KPI definitions. The corpus has no numeric targets." }],
+    ["instruction", { status: "done", detail: "training/ethikcorp-businessos-instruct.jsonl is prepared for a later LoRA. No model has been fine-tuned." }],
+    ...Object.entries(state.stages),
+    ["finetune", { status: "held", detail: state.finetune.detail }]
+  ];
   return <section aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2></div>
     <div className="pipe">{stages.map(([id, stage]) => {
-      const label = id === "finetune" ? "Not runnable here" : stage.status === "done" ? "Done" : stage.status === "running" ? "Running" : "Not started";
+      const label = id === "finetune" ? "Not runnable here" : id === "instruction" ? "Prepared, not trained" : stage.status === "done" ? "Done" : stage.status === "running" ? "Running" : "Not started";
       return <article className={`pipe-card ${stageClass(id, stage.status)} lift`} key={id}>
         <div className="pipe-top"><StageIcon id={id} /><b>{id === "finetune" ? "Fine-tune" : id}</b></div>
         <small>{stage.detail}</small>
@@ -275,7 +283,18 @@ function DemoSources({ state, reload }: { state: Access; reload: () => Promise<v
     {error && <p role="alert">{error}</p>}
     <p className="note">1. Sources linked. 2. Files indexed {done}{total ? ` of ${total}` : ""}.</p>
     <div className="meter" role="progressbar" aria-valuenow={total ? Math.round((done / total) * 100) : 0} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} /></div>
+    {state.demo?.sha && <p className="note">GitHub commit {state.demo.sha.slice(0, 12)}{state.demo.needsReingest ? ". The commit changed. Ingest again." : "."}</p>}
+    {state.quality && <DataQuality quality={state.quality} />}
   </div></section>;
+}
+
+function DataQuality({ quality }: { quality: NonNullable<Access["quality"]> }) {
+  const files = Object.values(quality.files || {});
+  return <div><h3>Data quality</h3><p className="note">Commit {quality.sha?.slice(0, 12) || "unknown"} · fetched {quality.fetchedAt}</p>
+    <p className="note">Cross-check {quality.cross?.pass ? "passed" : "failed"}.</p>
+    <ul>{quality.cross?.checks?.map((check) => <li key={check.name}>{check.pass ? "Passed" : "Failed"} · {check.detail}</li>)}</ul>
+    <ul>{files.filter((file) => file.rows).map((file) => <li key={file.path}>{file.pass ? "Passed" : "Failed"} · {file.path} · {file.rows} rows · {file.source}{file.driveId ? ` · Drive ${file.driveId}` : ""} · {file.schema?.map((column) => `${column.name}:${column.type}`).join(", ")}</li>)}</ul>
+  </div>;
 }
 
 function Ownership({ reload }: { reload: () => Promise<void> }) {
@@ -331,7 +350,7 @@ function DevTools({ state, reload }: { state: Access; reload: () => Promise<void
 }
 
 function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }) {
-  const [insight, setInsight] = useState<{ chart?: Access["pins"] extends (infer T)[] | undefined ? T : never; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[] } | null>(null);
+  const [insight, setInsight] = useState<{ chart?: Access["pins"] extends (infer T)[] | undefined ? T : never; fixes?: Access["opportunities"]; steps?: { tool: string; detail: string }[]; provenance?: { file: string; rowsUsed: number; filter: string }; rows?: Record<string, unknown>[] } | null>(null);
   const hourRows = dash.hourBars.map((row, index) => ({ ...row, note: "estimate", color: BAR_CYCLE[index % BAR_CYCLE.length] }));
   return <>
     <header className="greet">
@@ -345,7 +364,7 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
     </header>
     <OpportunityList items={state.opportunities || []} reload={reload} title="Top revenue opportunities" />
     {(state.pins || []).length > 0 && <section className="card pad" style={{ marginTop: 16 }}><div className="ch"><h2>Pinned insights</h2></div><div className="grid g2">{state.pins?.map((chart) => <LiveChart key={chart.id} spec={chart} />)}</div></section>}
-    {insight?.chart && <section className="card pad insight"><div className="ch"><h2>Live insight</h2><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/pin", { chart: insight.chart }); await reload(); }}>Pin to dashboard</button></div><LiveChart spec={insight.chart} />{insight.steps && <ol className="steps">{insight.steps.map((step, index) => <li key={index}><b>{step.tool}</b> {step.detail}</li>)}</ol>}</section>}
+    {insight?.chart && <section className="card pad insight"><div className="ch"><h2>Live insight</h2><button type="button" className="btn sm" onClick={async () => { await api("/api/brain/pin", { chart: insight.chart }); await reload(); }}>Pin to dashboard</button></div><LiveChart spec={insight.chart} />{insight.provenance && <p className="note">{insight.provenance.file} · {insight.provenance.rowsUsed} rows · {insight.provenance.filter}</p>}{(insight.rows || []).length > 0 && <details className="how"><summary>View rows</summary><table className="tbl"><tbody>{(insight.rows || []).slice(0, 8).map((row: Record<string, unknown>, index: number) => <tr key={index}><td>{Object.entries(row).slice(0, 4).map(([key, value]) => `${key}: ${value}`).join(" · ")}</td></tr>)}</tbody></table></details>}{insight.steps && <ol className="steps">{insight.steps.map((step, index) => <li key={index}><b>{step.tool}</b> {step.detail}</li>)}</ol>}</section>}
     <div className="bento">
       <article className="tile sky lift"><div className="l">Indexed documents</div><div className="v">{state.documents.length}</div></article>
       <article className="tile lime lift"><div className="l">Passages</div><div className="v">{state.chunks}</div></article>

@@ -1,11 +1,14 @@
 import { parseCsv } from "./csv.mjs";
 import { ingestDocument } from "./brain-pipeline.mjs";
+import { crossCheck, validateTable } from "./quality.mjs";
+import { buildSemanticLayer } from "./semantic.mjs";
 import { WORKFLOW_FILES, parseWorkflow, proposeAutomations } from "./workflows.mjs";
 
 export const DEMO_GITHUB = "https://github.com/Jaferdecodesai/ethikcorp-businessos-demo-data";
 export const DEMO_RAW = "https://raw.githubusercontent.com/Jaferdecodesai/ethikcorp-businessos-demo-data/main/";
 export const DEMO_DRIVE = "https://drive.google.com/drive/folders/1sjU5DFEFRSwi1WcJFDz9tPRFwPHouut4";
 const TREE = "https://api.github.com/repos/Jaferdecodesai/ethikcorp-businessos-demo-data/git/trees/main?recursive=1";
+const COMMIT = "https://api.github.com/repos/Jaferdecodesai/ethikcorp-businessos-demo-data/commits/main";
 
 const DATASETS = {
   "sample-data/monthly-revenue-by-service-line.csv": "revenue",
@@ -22,11 +25,15 @@ export async function demoPlan(fetchImpl = fetch) {
   const manifestResponse = await fetchImpl(`${DEMO_RAW}drive-manifest.json`);
   const manifest = manifestResponse.ok ? await manifestResponse.json() : { files: [] };
   const drive = await probeDrive(fetchImpl, manifest);
-  const treeResponse = await fetchImpl(TREE, { headers: { accept: "application/vnd.github+json", "user-agent": "ethikcorp-businessos-review" } });
+  const headers = { accept: "application/vnd.github+json", "user-agent": "ethikcorp-businessos-review" };
+  const commitResponse = await fetchImpl(COMMIT, { headers });
+  const commit = commitResponse.ok ? await commitResponse.json() : {};
+  const treeResponse = await fetchImpl(TREE, { headers });
   if (!treeResponse.ok) throw new Error("The public GitHub demo repository could not be listed.");
   const tree = await treeResponse.json();
-  const files = (tree.tree || []).filter((item) => item.type === "blob" && wantedPath(item.path)).map((item) => ({ path: item.path, size: item.size }));
-  return { github: DEMO_GITHUB, raw: DEMO_RAW, driveUrl: DEMO_DRIVE, drive, files };
+  const files = (tree.tree || []).filter((item) => item.type === "blob" && wantedPath(item.path)).map((item) => ({ path: item.path, size: item.size, sha: item.sha }));
+  const driveIndex = Object.fromEntries((manifest.files || []).map((file) => [file.path, file.drive_id]));
+  return { github: DEMO_GITHUB, raw: DEMO_RAW, driveUrl: DEMO_DRIVE, drive, files, sha: commit.sha || "", driveIndex };
 }
 
 export async function probeDrive(fetchImpl, manifest) {
@@ -49,9 +56,14 @@ export async function ingestDemoFile(brain, filePath, fetchImpl = fetch) {
   const text = await response.text();
   let next = brain;
   const datasets = { ...(brain.datasets || {}) };
-  if (DATASETS[filePath]) datasets[DATASETS[filePath]] = { ...parseCsv(text), sample: true, source: filePath };
+  const fetchedAt = new Date().toISOString();
+  if (DATASETS[filePath]) {
+    const parsed = parseCsv(text);
+    const validation = validateTable(filePath, parsed);
+    datasets[DATASETS[filePath]] = { ...parsed, sample: true, source: filePath, validation };
+  }
   if (filePath.endsWith("_consistency-check.json")) datasets.consistency = { rows: [JSON.parse(text)], sample: true, source: filePath };
-  next = { ...next, datasets };
+  next = { ...next, datasets, semantic: datasets.revenue ? buildSemanticLayer() : next.semantic };
   if (filePath.endsWith(".md") || filePath.endsWith(".csv")) {
     const replaced = replaceDocument(next, { name: filePath, text, sourceId: filePath.startsWith("sample-data/") ? "sample" : "public-kb" });
     if (!replaced.ok) return { ok: false, brain, error: replaced.error };
@@ -62,7 +74,9 @@ export async function ingestDemoFile(brain, filePath, fetchImpl = fetch) {
     map.proposals = proposeAutomations(map, next.datasets || {});
     next = { ...next, workflowMaps: { ...(next.workflowMaps || {}), [map.departmentId]: map } };
   }
-  next = { ...next, demo: { ...(next.demo || {}), github: DEMO_GITHUB, driveUrl: DEMO_DRIVE } };
+  const fileRecord = { path: filePath, source: "github", driveId: next.demo?.driveIndex?.[filePath] || "", sha: next.demo?.sha || "", fetchedAt, rows: datasets[DATASETS[filePath]]?.rows.length || 0, schema: datasets[DATASETS[filePath]]?.schema || [], checks: datasets[DATASETS[filePath]]?.validation?.checks || [], pass: datasets[DATASETS[filePath]]?.validation?.pass !== false };
+  const files = { ...(next.quality?.files || {}), [filePath]: fileRecord };
+  next = { ...next, demo: { ...(next.demo || {}), github: DEMO_GITHUB, driveUrl: DEMO_DRIVE }, quality: { sha: next.demo?.sha || "", fetchedAt, files, cross: crossCheck(next.datasets || {}) } };
   return { ok: true, brain: next, sample: filePath.startsWith("sample-data/") || filePath.startsWith("workflows/") };
 }
 

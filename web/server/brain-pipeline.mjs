@@ -39,6 +39,15 @@ export function parseDocument(name, text) {
   return { ok: true, text: cleaned };
 }
 
+export function chunkMarkdown(name, text) {
+  const parts = String(text || "").split(/^(?=#{1,6} )/m).map((part) => part.trim()).filter(Boolean);
+  return (parts.length ? parts : [String(text || "")]).flatMap((part) => {
+    const heading = (part.match(/^#{1,6} +(.+)$/m) || [, "Document"])[1].trim();
+    const anchor = heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    return chunkText(part).map((body) => ({ text: body, heading, anchor, source: name }));
+  }).slice(0, 80);
+}
+
 export function chunkText(text) {
   const blocks = text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   const chunks = [];
@@ -65,7 +74,7 @@ export function answerFromChunks(question, chunks) {
   }
   return {
     answer: ranked[0].text,
-    citations: ranked.map((chunk) => ({ document: chunk.document, excerpt: chunk.text.slice(0, 280), score: Math.round(chunk.score * 1000) / 1000 })),
+    citations: ranked.map((chunk) => ({ document: chunk.document, heading: chunk.heading || "", anchor: chunk.anchor || "", excerpt: chunk.text.slice(0, 280), score: Math.round(chunk.score * 1000) / 1000 })),
     llm: "not_configured",
     retrieval: "prototype-hashing",
     note: "The cited passage is returned directly. No base model is connected on this Worker."
@@ -80,7 +89,8 @@ export function ingestDocument(brain, input) {
   const parsed = parseDocument(input.name, input.text);
   if (!parsed.ok) return { ok: false, error: parsed.error, brain };
   const id = `doc-${brain.documents.length + 1}-${Date.now()}`;
-  const pieces = chunkText(parsed.text).map((text, index) => ({ id: `${id}-${index}`, documentId: id, document: input.name, text, embedding: embed(text) }));
+  const rich = String(input.name || "").endsWith(".md") ? chunkMarkdown(input.name, parsed.text) : chunkText(parsed.text).map((body) => ({ text: body, heading: "", anchor: "", source: input.name }));
+  const pieces = rich.map((piece, index) => ({ id: `${id}-${index}`, documentId: id, document: input.name, heading: piece.heading, anchor: piece.anchor, source: piece.source, text: piece.text, embedding: embed(piece.text) }));
   const next = { ...brain, documents: [...brain.documents, { id, name: input.name, sourceId: input.sourceId || "", text: parsed.text }], chunks: [...brain.chunks, ...pieces] };
   const check = answerFromChunks(tokenize(parsed.text).slice(0, 6).join(" "), next.chunks);
   return { ok: true, brain: next, citationReady: check.citations.length > 0 };
