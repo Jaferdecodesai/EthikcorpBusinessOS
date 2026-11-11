@@ -131,18 +131,24 @@ export function departmentGate(confirmed) {
   }));
 }
 
-export function portalAccess(role, brain) {
-  const report = stageReport(brain);
-  const departments = departmentGate(brain.confirmed || {});
+export function portalAccess(role, brain, env = {}) {
+  const mode = env?.PORTAL_MODE === "customer" || env?.PORTAL_MODE === "aqionteam" ? env.PORTAL_MODE : "production";
+  const current = brain || {};
+  const report = stageReport(current);
+  const departments = departmentGate(current.confirmed || {});
   const botsReady = departments.every((department) => department.confirmed);
-  const dev = role === "dev";
+  const step1 = Boolean(current.ownershipReady);
+  const dev = mode === "customer" ? false : role === "dev";
+  const brainEnabled = mode === "customer" ? step1 : dev || report.brainReady;
+  const botsEnabled = mode === "customer" ? step1 : dev || botsReady;
+  const bothLive = report.brainReady && botsReady;
   const tabs = [
-    { id: "pm", label: "BusinessBrain Builder", enabled: true },
-    { id: "brain", label: "Ethikcorp BusinessBrain", enabled: dev || report.brainReady },
-    { id: "bots", label: "Ethikcorp Businessbots", enabled: dev || botsReady }
+    { id: "pm", label: "BusinessBrain PM", enabled: true },
+    { id: "brain", label: "Ethikcorp BusinessBrain", enabled: brainEnabled },
+    { id: "bots", label: "Ethikcorp Businessbots", enabled: botsEnabled }
   ];
-  const order = !dev && report.brainReady && botsReady ? ["brain", "bots", "pm"] : ["pm", "brain", "bots"];
-  return { role: dev ? "dev" : "customer", percent: report.percent, brainReady: report.brainReady, botsReady, tabs: order.map((id) => tabs.find((tab) => tab.id === id)), departments, stages: report.stages };
+  const order = (mode === "customer" ? bothLive : !dev && bothLive) ? ["brain", "bots", "pm"] : ["pm", "brain", "bots"];
+  return { role: dev ? "dev" : "customer", portalMode: mode, ownershipReady: step1, percent: report.percent, brainReady: report.brainReady, botsReady, tabs: order.map((id) => tabs.find((tab) => tab.id === id)), departments, stages: report.stages };
 }
 
 export function connectorStatus({ github = false, drive = false } = {}) {

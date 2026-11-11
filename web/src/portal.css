@@ -562,6 +562,7 @@ h3, .ch h3, .fix h3 { font: 600 15px/22px var(--f); text-transform: none; }
 .side a.nav, .side button.nav { height: 34px; min-height: 34px; padding: 0 11px; border-radius: 7px; color: #5c5d63; background: transparent; font: 500 13px/16px Inter, sans-serif; }
 .side a.nav:hover, .side button.nav:hover { background: transparent; color: #8e9096; }
 .side a.nav.on, .side button.nav.on { background: #49a2e6; color: #00254e; font-weight: 600; }
+.side a.nav.dim { opacity: .55; }
 .side a.nav.on::before, .side button.nav.on::before { left: -12px; top: 8px; width: 2px; height: 18px; border-radius: 0; background: #ddfb5d; }
 .sidefoot { color: #a0a2a6; font: 400 11px/14px Inter, sans-serif; border-top: 1px solid #131418; padding: 16px 20px 18px; }
 .maincol { margin-left: 240px; }

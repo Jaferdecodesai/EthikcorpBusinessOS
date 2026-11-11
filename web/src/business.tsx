@@ -7,6 +7,8 @@ import { formatCompact, formatFull } from "./format";
 
 type Access = {
   role: "customer" | "dev";
+  portalMode?: "production" | "customer" | "aqionteam";
+  ownershipReady?: boolean;
   percent: number;
   brainReady: boolean;
   botsReady: boolean;
@@ -93,8 +95,14 @@ async function api(path: string, body?: unknown) {
   return data;
 }
 
+function normalizeHash(value: string) {
+  const hash = value || "#pm";
+  if (hash === "#builder" || hash.startsWith("#builder/") || hash.startsWith("#builder?")) return hash.replace("#builder", "#pm");
+  return hash;
+}
+
 export function BusinessApp() {
-  const [hash, setHash] = useState(window.location.hash || "#pm");
+  const [hash, setHash] = useState(normalizeHash(window.location.hash || "#pm"));
   const [state, setState] = useState<Access | null>(null);
   const [error, setError] = useState("");
   const [navOpen, setNavOpen] = useState(false);
@@ -128,21 +136,27 @@ export function BusinessApp() {
     const start = invite ? api("/api/brain/claim", { invite }).catch(() => undefined).then(() => { history.replaceState(null, "", "/#pm"); setHash("#pm"); return reload(); }) : reload();
     void start;
     const timer = window.setInterval(reload, 4000);
-    const onHash = () => setHash(window.location.hash || "#pm");
+    const onHash = () => {
+      const next = normalizeHash(window.location.hash || "#pm");
+      if (next !== (window.location.hash || "#pm")) history.replaceState(null, "", `/${next}`);
+      setHash(next);
+    };
+    onHash();
     window.addEventListener("hashchange", onHash);
     return () => { window.clearInterval(timer); window.removeEventListener("hashchange", onHash); };
   }, []);
   const raw = hash.replace("#", "") || "pm";
-  const tab = raw.startsWith("bots/") ? "bots" : (raw === "dev" || raw === "customer" ? "pm" : raw);
+  const tab = raw.startsWith("bots/") ? "bots" : (raw === "dev" || raw === "customer" || raw === "builder" ? "pm" : raw);
   const current = state?.tabs.find((item) => item.id === tab);
-  const allowed = !current || current.enabled;
-  const pageName = tab === "brain" ? "Business overview" : tab === "bots" ? "Businessbots" : "BusinessBrain Builder";
+  const customerPortal = state?.portalMode === "customer";
+  const allowed = customerPortal ? Boolean(current?.enabled) : (!current || current.enabled);
+  const pageName = tab === "brain" ? "Business overview" : tab === "bots" ? "Businessbots" : "BusinessBrain PM";
   return <div className={`portal ${chatOpen ? "chat-open" : "chat-collapsed"} ${navOpen ? "nav-open" : ""}`}>
     {navOpen && <button type="button" className="nav-scrim" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
     <aside className="side" aria-label="Ethikcorp BusinessOS">
       <div className="side-stick">
       <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
-      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`} onClick={() => setNavOpen(false)}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
+      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain PM", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`} onClick={() => setNavOpen(false)}>{item.label}</a> : <a key={item.id} className="nav dim" href={`#${item.id}`} title={customerPortal && !state?.ownershipReady ? "Opens after Step 1, Source ownership" : "This opens when the build reaches it"} onClick={() => setNavOpen(false)}>{item.label}</a>)}</nav>
       <div className="sidefoot">{state?.role === "dev" && !ceoView ? "Development view. Answer traces stay in the chat." : "Customer view. Locked areas open from live build progress."}</div>
       </div>
     </aside>
@@ -162,7 +176,7 @@ export function BusinessApp() {
       <div className="page live-pad">
         {!state && <DashboardSkeleton />}
         {error && <div className="banner-need" role="alert">{error}</div>}
-        {!allowed && <Locked percent={state?.percent || 0} what={tab} departments={state?.departments || []} />}
+        {!allowed && <Locked percent={state?.percent || 0} what={tab} departments={state?.departments || []} portalMode={state?.portalMode} step1={Boolean(state?.ownershipReady)} />}
         {allowed && tab === "pm" && state && <Project state={state} reload={reload} />}
         {allowed && tab === "brain" && state && <Brain state={state} reload={reload} />}
         {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
@@ -172,10 +186,11 @@ export function BusinessApp() {
   </div>;
 }
 
-function Locked({ percent, what, departments }: { percent: number; what: string; departments: { confirmed: boolean }[] }) {
+function Locked({ percent, what, departments, portalMode, step1 }: { percent: number; what: string; departments: { confirmed: boolean }[]; portalMode?: string; step1?: boolean }) {
   const bots = what === "bots";
+  const waiting = portalMode === "customer" && !step1;
   const confirmed = departments.filter((department) => department.confirmed).length;
-  const shown = bots ? Math.round((confirmed / 9) * 100) : percent;
+  const shown = waiting ? 0 : bots ? Math.round((confirmed / Math.max(1, departments.length || 9)) * 100) : percent;
   return <div className="lock-stage">
     <div className="lock-preview" aria-hidden="true">
       <div className="bento">
@@ -190,10 +205,10 @@ function Locked({ percent, what, departments }: { percent: number; what: string;
     <section className="lock-card">
       <div className="lock-badge">Locked</div>
       <div className="eyebrow">Still building</div>
-      <h1>{bots ? "Your department Businessbots are being built" : "BusinessBrain is being built"}</h1>
+      <h1>{waiting ? "BusinessBrain and Businessbots open after Step 1" : bots ? "Your department Businessbots are being built" : "BusinessBrain is being built"}</h1>
       <Ring percent={shown} />
       <div className="meter" role="progressbar" aria-valuenow={shown} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${shown}%` }} /></div>
-      <p className="note">{bots ? `${confirmed} of 9 departments confirmed. This percentage counts confirmed departments. It is not a forecast.` : "This percentage counts finished pipeline stages. It is not a forecast."}</p>
+      <p className="note">{waiting ? "Import and validate the ownership workbook in BusinessBrain PM. All 18 sources must be present. These tabs stay locked until that file is valid." : bots ? `${confirmed} of 9 departments confirmed. This percentage counts confirmed departments. It is not a forecast.` : "This percentage counts finished pipeline stages. It is not a forecast."}</p>
     </section>
   </div>;
 }
@@ -201,7 +216,7 @@ function Locked({ percent, what, departments }: { percent: number; what: string;
 function Project({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [notice, setNotice] = useState("");
   function speak() {
-    const text = `Build progress is ${state.percent} percent. ${state.documents.length} documents are indexed.`;
+    const text = `BusinessBrain PM progress is ${state.percent} percent. ${state.documents.length} documents are indexed.`;
     if (!("speechSynthesis" in window)) { setNotice("This browser has no speech engine. The status is on screen."); return; }
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
@@ -210,7 +225,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
   return <>
     <section className="hero-build">
       <div className="hero-copy">
-        <div className="eyebrow">BusinessBrain Builder</div>
+        <div className="eyebrow">BusinessBrain PM</div>
         <h1>Build the company brain</h1>
         <p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p>
         <div className="kpi-row builder-kpis"><article className="kpi-tile"><span className="kpi-label">Build progress</span><span className="kpi-value">{state.percent}%</span></article><article className="kpi-tile"><span className="kpi-label">Documents indexed</span><span className="kpi-value">{state.documents.length}</span></article><article className="kpi-tile"><span className="kpi-label">Passages</span><span className="kpi-value">{state.chunks}</span></article><article className="kpi-tile"><span className="kpi-label">Files checked</span><span className="kpi-value">{state.demo?.filesDone || 0}</span></article></div>
@@ -223,9 +238,9 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
     </section>
     {notice && <p className="note" role="status">{notice}</p>}
     <Outline state={state} />
-    <DemoSources state={state} reload={reload} />
-    <Ownership reload={reload} />
-    <Handoff reload={reload} />
+    {state.portalMode !== "customer" && <DemoSources state={state} reload={reload} />}
+    <Ownership state={state} reload={reload} />
+    {state.portalMode !== "customer" && <Handoff reload={reload} />}
     <section className="card band-card lift"><div className="card-band">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p><p className="note">About: built by Aqionlabs.ai.</p></div></section>
     {state.role === "dev" && <DevTools state={state} reload={reload} />}
   </>;
@@ -277,7 +292,8 @@ function DemoSources({ state, reload }: { state: Access; reload: () => Promise<v
     <label>GitHub<input aria-label="GitHub demo repository" value={github} onChange={(event) => setGithub(event.target.value)} /></label>
     <label>Google Drive<input aria-label="Google Drive demo folder" value={drive} onChange={(event) => setDrive(event.target.value)} /></label>
     <p>{state.demo?.drive?.detail || "Drive has not been checked yet."}</p>
-    <button className="btn" type="button" onClick={ingest} disabled={Boolean(busy && busy !== "Indexed.")}>Ingest demo sources</button>
+    {state.portalMode === "aqionteam" && <button className="btn ghost" type="button" onClick={async () => { try { await api("/api/brain/ownership-sample", {}); setBusy("Demo ownership sample imported."); await reload(); } catch (reason) { setError((reason as Error).message); } }}>Use the demo ownership sample</button>}
+    {state.portalMode !== "customer" && <button className="btn" type="button" onClick={ingest} disabled={Boolean(busy && busy !== "Indexed.")}>Ingest demo sources</button>}
     {busy && <p role="status">{busy}</p>}
     {error && <p role="alert">{error}</p>}
     <p className="note">1. Sources linked. 2. Files indexed {done}{total ? ` of ${total}` : ""}.</p>
@@ -296,9 +312,9 @@ function DataQuality({ quality }: { quality: NonNullable<Access["quality"]> }) {
   </div>;
 }
 
-function Ownership({ reload }: { reload: () => Promise<void> }) {
+function Ownership({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [message, setMessage] = useState("");
-  return <section className="card band-card lift"><div className="card-band coral">1. Source ownership</div><div className="pad"><p className="note">Upload the completed .xlsx. All 18 sources must be present. Row errors stay on screen and nothing is stored until the file is valid.</p>
+  return <section className="card band-card lift"><div className="card-band coral">1. Source ownership</div><div className="pad"><p className="note">{state.portalMode === "customer" ? "Step 1. Upload the completed .xlsx. All 18 sources must be present. BusinessBrain and Businessbots stay locked until this file is valid. A valid import starts the build." : "Upload the completed .xlsx. All 18 sources must be present. Row errors stay on screen and nothing is stored until the file is valid."}</p>
     <form className="stack" onSubmit={async (event) => {
       event.preventDefault();
       const file = new FormData(event.currentTarget).get("file");
@@ -508,20 +524,24 @@ function Bots({ hash, state, reload }: { hash: string; state: Access; reload: ()
   const selected = parts[1];
   const process = parts[2] === "process";
   const department = catalog.find((item) => item.id === selected);
-  if (!department) return <div className="dept-grid">{catalog.map((item) => {
+  const confirmedCount = state.departments.filter((item) => item.confirmed).length;
+  const built = Math.round((confirmedCount / 9) * 100);
+  if (!department) return <div className="board"><div className="span-12"><p className="note">{confirmedCount} of 9 departments confirmed. {built}% built. Pending departments stay marked as being built.</p></div><div className="dept-grid span-12">{catalog.map((item) => {
     const weekly = (state.workflowMaps?.[item.id]?.flows || []).reduce((sum, flow) => sum + (flow.weeklyHours || 0), 0);
+    const confirmed = state.departments.find((row) => row.id === item.id)?.confirmed;
     return <a className="dept-card" key={item.id} href={`#bots/${item.id}`}>
       <div className="dept-face"><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div>{weekly ? <div className="dept-metric">{weekly.toLocaleString("en-AE", { maximumFractionDigits: 1 })} h</div> : <div className="dept-metric">—</div>}<div className="dept-kicker">{weekly ? "Sample hours / week" : "Not measured"}</div></div></div>
-      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p>{!weekly && <span className="badge neutral">Not measured</span>}</div>
+      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p>{confirmed ? <span className="badge success">Confirmed</span> : <span className="badge neutral">Being built · {built}%</span>}</div>
     </a>;
-  })}</div>;
+  })}</div></div>;
   return <>
     <header className="page-head">
       <p className="note"><a href="#bots">Businessbots</a> / {department.name}</p>
       <h1>{department.name}</h1>
       <p className="sub">{department.mandate}</p>
-      <div className="controls"><label>Department<select aria-label="Department" value={department.id} onChange={(event) => { window.location.hash = `#bots/${event.target.value}`; }}>{catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "badge success" : "badge neutral"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : "Not confirmed"}</span></div>
+      <div className="controls"><label>Department<select aria-label="Department" value={department.id} onChange={(event) => { window.location.hash = `#bots/${event.target.value}`; }}>{catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "badge success" : "badge neutral"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : `Being built · ${built}%`}</span></div>
     </header>
+    {state.portalMode === "customer" && !state.departments.find((item) => item.id === department.id)?.confirmed ? <Locked percent={built} what="bots" departments={state.departments} portalMode={state.portalMode} step1 /> : null}
     <DeptFacts name={department.name} model={state.model} />
     <BotDesk departmentId={department.id} process={process} state={state} reload={reload} />
     {state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>Confirm this department</button>}
