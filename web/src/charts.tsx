@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { axisTicks, formatCompact, formatDelta, formatFull, tickLabel } from "./format";
 
 const BLUE = "#1F5FBF";
 const ORANGE = "#C25400";
 const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
-export type ChartPoint = { name: string; value?: number; values?: number[]; target?: number | null; belowTarget?: boolean; statusLabel?: string };
+export type ChartPoint = { name: string; value?: number; values?: number[]; target?: number | null; belowTarget?: boolean; statusLabel?: string; shortName?: string };
 export type ChartSpec = {
   id: string;
   type: string;
@@ -13,6 +13,7 @@ export type ChartSpec = {
   sample?: boolean;
   unit?: string;
   span?: number;
+  mark?: "blue" | "green";
   categories?: string[];
   target?: number | null;
   targetLabel?: string;
@@ -34,14 +35,12 @@ export type KpiModel = {
   mode?: string;
 };
 
-const MIX = ["#1F5FBF", "#3E9B63", "#0E3A75", "#237A4B", "#4F8FD9"];
-const GREEN = "#3E9B63";
+const MIX = ["#1F5FBF", "#2B8A5A", "#0E3A75", "#14663F", "#4C8DD6"];
+const GREEN = "#2B8A5A";
 
-function colorFor(point: ChartPoint, index: number, mix = false) {
+function colorFor(point: ChartPoint, index: number, mix = false, mark: "blue" | "green" = "blue") {
   if (mix) return point.name === "Other" ? "#8A949E" : MIX[index % MIX.length];
-  if (point.belowTarget) return ORANGE;
-  if (point.target != null) return GREEN;
-  return BLUE;
+  return mark === "green" ? GREEN : BLUE;
 }
 
 export function BarList({ caption, rows }: { caption: string; rows: { id: string; label: string; value: number; href?: string; note?: string }[]; bold?: boolean }) {
@@ -109,7 +108,7 @@ function Bars({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: stri
   return <div className="hbar" role="img" aria-label={spec.aria || spec.title}>
     <div className="hbar-axis" aria-hidden="true"><span /><span className="hbar-scale">{ticks.map((tick) => <span key={tick} style={{ left: `${(tick / top) * 100}%` }}>{percent ? `${tick}%` : tickLabel(tick)}</span>)}</span><span /></div>
     {rows.map((row, index) => {
-      const color = colorFor(row, index);
+      const color = colorFor(row, index, false, spec.mark);
       const width = `${Math.max(0, Math.min(100, ((row.value || 0) / top) * 100))}%`;
       return <button type="button" className="hbar-row" data-flip={row.name} key={row.name} title={row.name} onMouseEnter={() => onHover({ title: row.name, lines: [formatFull(row.value || 0, spec.unit), row.belowTarget ? "Below target" : ""] })} onFocus={() => onHover({ title: row.name, lines: [formatFull(row.value || 0, spec.unit)] })}>
         <span className="hbar-name"><span>{row.name}</span>{row.belowTarget && <em className="below-label">{row.statusLabel || "Below target"}</em>}</span>
@@ -143,7 +142,7 @@ function Columns({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: s
         {spec.target != null && <div className="target-line" style={{ bottom: `${Math.max(0, Math.min(100, (spec.target / top) * 100))}%` }}><span>Target {formatCompact(spec.target, spec.unit)}</span></div>}
         {categories.map((category, index) => {
           const point = spec.series.find((item) => item.name === category);
-          const color = point ? colorFor(point, 0) : BLUE;
+          const color = BLUE;
           const height = `${Math.max(0, Math.min(100, (values[index] / top) * 100))}%`;
           return <button type="button" className="vbar-col" key={category} title={formatFull(values[index], spec.unit)} onMouseEnter={() => onHover({ title: category, lines: [formatFull(values[index], spec.unit), point?.belowTarget ? "Below target" : "On target"] })} onFocus={() => onHover({ title: category, lines: [formatFull(values[index], spec.unit)] })}>
             <i style={{ height, background: color, transition: `height 250ms ${EASE}` }} />
@@ -155,24 +154,55 @@ function Columns({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: s
   </div>;
 }
 
+const SHORT: Record<string, string> = {
+  "Business Transformation Consulting": "Transformation Consulting",
+  "AI-Enabled Business Transformation": "AI-Enabled Transformation",
+  "Corporate Training Programs": "Corporate Training",
+  "AI Agents for Workflow Automation": "AI Agents for Workflow",
+  "Leadership Development & Culture Transformation": "Leadership & Culture",
+  "Gamification in Learning & Corporate Education": "Gamification"
+};
+
 function Donut({ spec, onHover }: { spec: ChartSpec; onHover: (tip: { title: string; lines: string[] } | null) => void }) {
   const series = spec.series.filter((item) => (item.value || 0) > 0);
   const total = spec.total || series.reduce((sum, item) => sum + (item.value || 0), 0) || 1;
-  const radius = 15.915;
+  const size = 184;
+  const ring = 22;
+  const radius = (size - ring) / 2;
   const turn = 2 * Math.PI * radius;
   let cursor = 0;
+  const valueRef = useRef<HTMLSpanElement>(null);
+  const compact = formatCompact(total, spec.unit).replace(/^AED\s*/, "");
+  useEffect(() => {
+    const node = valueRef.current;
+    if (!node) return;
+    let next = 24;
+    node.style.fontSize = "24px";
+    while (node.scrollWidth > 116 && next > 16) {
+      next -= 2;
+      node.style.fontSize = `${next}px`;
+    }
+  }, [compact]);
   return <div className="donut-block">
-    <svg viewBox="0 0 42 42" className="donut" role="img" aria-label={spec.aria || spec.title}>
-      {series.map((item, index) => {
-        const length = ((item.value || 0) / total) * turn;
-        const dash = `${Math.max(0, length - 1.1)} ${turn}`;
-        const node = <circle key={item.name} cx="21" cy="21" r={radius} fill="none" stroke={colorFor(item, index, true)} strokeWidth="6" strokeDasharray={dash} strokeDashoffset={-cursor} transform="rotate(-90 21 21)" />;
-        cursor += length;
-        return node;
-      })}
-      <text x="21" y="20.2" textAnchor="middle" className="donut-total">{formatCompact(total, spec.unit)}</text>
-      <text x="21" y="24.4" textAnchor="middle" className="donut-caption">Total</text>
-    </svg>
-    <ul className="donut-labels">{series.map((item, index) => <li key={item.name}><button type="button" onMouseEnter={() => onHover({ title: item.name, lines: [formatFull(item.value || 0, spec.unit), `${Math.round(((item.value || 0) / total) * 100)}% of total`] })} onFocus={() => onHover({ title: item.name, lines: [formatFull(item.value || 0, spec.unit)] })}><i style={{ background: colorFor(item, index, true) }} />{item.name} · {formatCompact(item.value || 0, spec.unit)} · {Math.round(((item.value || 0) / total) * 100)}%</button></li>)}</ul>
+    <div className="donut-ring">
+      <svg viewBox={`0 0 ${size} ${size}`} className="donut" role="img" aria-label={spec.aria || spec.title}>
+        {series.map((item, index) => {
+          const length = ((item.value || 0) / total) * turn;
+          const dash = `${Math.max(0, length - 2)} ${turn}`;
+          const node = <circle key={item.name} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={colorFor(item, index, true)} strokeWidth={ring} strokeDasharray={dash} strokeDashoffset={-cursor} transform={`rotate(-90 ${size / 2} ${size / 2})`} />;
+          cursor += length;
+          return node;
+        })}
+      </svg>
+      <div className="donut-centre">
+        <span className="d-cur">AED</span>
+        <span className="d-val num" ref={valueRef}>{compact}</span>
+        <span className="d-lab">Total revenue</span>
+      </div>
+    </div>
+    <table className="legend-table">
+      <thead><tr><th /><th>Service line</th><th>AED</th><th>Share</th></tr></thead>
+      <tbody>{series.map((item, index) => <tr key={item.name} title={item.name} onMouseEnter={() => onHover({ title: item.name, lines: [formatFull(item.value || 0, spec.unit), `${Math.round(((item.value || 0) / total) * 100)}% of total`] })}><td><i style={{ background: colorFor(item, index, true) }} /></td><td>{item.shortName || SHORT[item.name] || item.name}</td><td className="num">{formatCompact(item.value || 0, spec.unit).replace(/^AED\s*/, "")}</td><td className="num">{Math.round(((item.value || 0) / total) * 100)}%</td></tr>)}</tbody>
+    </table>
   </div>;
 }

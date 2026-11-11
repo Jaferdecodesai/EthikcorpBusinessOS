@@ -21,7 +21,7 @@ export function formatCompact(value: number, unit?: string) {
   if (unit === "AED") {
     const abs = Math.abs(value);
     const sign = value < 0 ? "−" : "";
-    if (abs >= 1_000_000) return `AED\u00A0${sign}${(abs / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000_000) return `AED\u00A0${sign}${(Math.round(abs / 10_000) / 100).toFixed(2)}M`;
     if (abs >= 10_000) return `AED\u00A0${sign}${Math.round(abs / 1000).toLocaleString("en-AE")}K`;
     return `AED\u00A0${sign}${Math.round(abs).toLocaleString("en-AE")}`;
   }

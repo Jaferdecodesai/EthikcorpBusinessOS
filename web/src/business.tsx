@@ -23,7 +23,7 @@ type Access = {
   demo?: { github: string; driveUrl: string; sha?: string; needsReingest?: boolean; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
   quality?: { sha: string; fetchedAt: string; files: Record<string, { path: string; source: string; status?: string; reason?: string; driveId?: string; rows: number; passages?: number; pass: boolean; schema?: { name: string; type: string }[] }>; cross?: { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } };
   datasets?: { id: string; rows: number }[];
-  model?: { ready: boolean; updated?: string; revenue: { month: string; label: string; line: string; value: number }[]; hours: { department: string; hours: number; available: number; billable: number }[]; stages: { name: string; value: number }[]; risk: { name: string; value: number }[]; winRate: number | null; winRateValue: number | null; weighted: number; targets: { metric: string; subject: string; value: number; unit: string; goodDirection: string }[] };
+  model?: { ready: boolean; updated?: string; grossOpen?: number; revenue: { month: string; label: string; line: string; value: number }[]; hours: { department: string; headcount?: number; hours: number; available: number; billable: number }[]; clients?: { name: string; line: string; status: string; revenue: number }[]; openDeals?: { client: string; stage: string; value: number; prob: number; weighted: number; department: string; owner: string }[]; stages: { name: string; value: number }[]; risk: { name: string; value: number }[]; winRate: number | null; winRateValue: number | null; weighted: number; targets: { metric: string; subject: string; value: number; unit: string; goodDirection: string }[] };
   opportunities?: { id: string; title: string; impactAed: number; formula: string; confidence: string; owner: string }[];
   pins?: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[] }[] }[];
   tasks?: { id: string; title: string; department: string; impactAed: number }[];
@@ -101,9 +101,8 @@ export function BusinessApp() {
   const [ceoView, setCeoView] = useState(true);
   const [chatOpen, setChatOpen] = useState(() => {
     const stored = localStorage.getItem("bos-chat");
-    if (stored === "rail") return false;
     if (stored === "open") return true;
-    return !window.matchMedia("(max-width: 767px)").matches;
+    return false;
   });
   function toggleChat() {
     setChatOpen((value) => {
@@ -115,6 +114,15 @@ export function BusinessApp() {
     try { setState(await api("/api/brain/state")); setError(""); }
     catch (reason) { setError((reason as Error).message); }
   }
+  useEffect(() => {
+    const dock = document.querySelector<HTMLElement>(".chat-dock");
+    if (!dock) return;
+    const apply = () => document.documentElement.style.setProperty("--dock-h", `${Math.ceil(dock.getBoundingClientRect().height)}px`);
+    const observer = new ResizeObserver(apply);
+    observer.observe(dock);
+    apply();
+    return () => observer.disconnect();
+  }, [chatOpen, hash]);
   useEffect(() => {
     const invite = new URLSearchParams(window.location.search).get("invite");
     const start = invite ? api("/api/brain/claim", { invite }).catch(() => undefined).then(() => { history.replaceState(null, "", "/#pm"); setHash("#pm"); return reload(); }) : reload();
@@ -135,7 +143,7 @@ export function BusinessApp() {
       <div className="side-stick">
       <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
       <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain Builder", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`} onClick={() => setNavOpen(false)}>{item.label}</a> : <button key={item.id} type="button" className="nav" disabled title="This opens when the build reaches it">{item.label}</button>)}</nav>
-      <div className="sidefoot">{state?.role === "dev" ? "Development view. Answer traces stay in the chat." : "CEO view. Locked areas open from live build progress."}</div>
+      <div className="sidefoot">{state?.role === "dev" && !ceoView ? "Development view. Answer traces stay in the chat." : "Customer view. Locked areas open from live build progress."}</div>
       </div>
     </aside>
     <div className="maincol">
@@ -159,7 +167,7 @@ export function BusinessApp() {
         {allowed && tab === "brain" && state && <Brain state={state} reload={reload} />}
         {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
       </div>
-      <ChatDock open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && !ceoView ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={raw.startsWith("bots/") ? raw.split("/")[1] : undefined} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />
+      <ChatDock open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && !ceoView ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={raw.startsWith("bots/") ? raw.split("/")[1] : undefined} placeholder={tab === "pm" ? "Ask about build status…" : tab === "bots" ? "Ask the department bot…" : "Ask about revenue, pipeline or utilisation"} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />
     </div>
   </div>;
 }
@@ -205,6 +213,7 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
         <div className="eyebrow">BusinessBrain Builder</div>
         <h1>Build the company brain</h1>
         <p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p>
+        <div className="kpi-row builder-kpis"><article className="kpi-tile"><span className="kpi-label">Build progress</span><span className="kpi-value">{state.percent}%</span></article><article className="kpi-tile"><span className="kpi-label">Documents indexed</span><span className="kpi-value">{state.documents.length}</span></article><article className="kpi-tile"><span className="kpi-label">Passages</span><span className="kpi-value">{state.chunks}</span></article><article className="kpi-tile"><span className="kpi-label">Files checked</span><span className="kpi-value">{state.demo?.filesDone || 0}</span></article></div>
         <button type="button" className="btn" onClick={speak}>Speak status</button>
       </div>
       <div className="hero-ring">
@@ -376,7 +385,7 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
         const id = detail.chartId && document.getElementById(detail.chartId) ? detail.chartId : chartIdFor(detail.view);
         setHighlight(id);
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }), 50);
+        window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 50);
         window.setTimeout(() => setHighlight(""), reduce ? 3000 : 1600);
       }
       if (detail.fixes) setFixes(detail.fixes);
@@ -414,8 +423,10 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
     {!overview && <section className="card pad empty-card"><h2>No revenue recorded yet</h2><p>Ingest the demo sources to load the sample tables. Nothing is invented before those files are indexed.</p></section>}
     {overview && <div className="kpi-row">{(overview.kpis as KpiModel[]).map((kpi) => <KpiTile key={kpi.id} kpi={kpi} onSelect={() => { setMode(kpi.mode || "revenue"); setFilter(null); }} />)}</div>}
     {overview && <div className="chart-row">{(overview.charts as ChartSpec[]).map((chart) => <div className={`chart-card span-${chart.span || 6} ${highlight === chart.id ? "flash" : ""} ${pending ? "pending" : ""}`} key={chart.id}><LiveChart spec={chart} /></div>)}</div>}
+    {state.model?.clients?.length ? <DataTables model={state.model} /> : null}
     {overview && !overview.charts.length && <section className="card pad empty-card"><h2>No rows for this view</h2><button type="button" className="btn ghost" onClick={() => setPeriod("last-6")}>Change period</button></section>}
-    <OpportunityList items={fixes} reload={reload} title="Revenue fixes" />
+    <div className="span-12 sec-h"><h2>Where to find AED 1M more</h2><span className="note">Revenue fixes from the indexed tables</span></div>
+    <OpportunityList items={fixes} reload={reload} />
   </div>;
 }
 
@@ -446,9 +457,50 @@ function DashboardSkeleton() {
   return <div className="board" aria-hidden="true">{[0, 1, 2, 3].map((item) => <div className="skeleton tile" key={item}><span /><span /><span /></div>)}<div className="skeleton chart" /><div className="skeleton chart" /></div>;
 }
 
-function OpportunityList({ items, reload, title }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void>; title: string }) {
+function DataTables({ model }: { model: NonNullable<Access["model"]> }) {
+  const [clientPage, setClientPage] = useState(0);
+  const [dealPage, setDealPage] = useState(0);
+  const clients = model.clients || [];
+  const deals = model.openDeals || [];
+  const pageSize = 7;
+  const clientSlice = clients.slice(clientPage * pageSize, clientPage * pageSize + pageSize);
+  const dealSlice = deals.slice(dealPage * pageSize, dealPage * pageSize + pageSize);
+  return <>
+      <section className="card chart-card data-table span-6">
+      <div className="card-h"><h3>Top clients</h3><span className="meta">Recognised revenue, TTM · AED</span><span className="badge neutral">Sample</span></div>
+      <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Client</th><th>Status</th><th className="num">Revenue</th></tr></thead><tbody>{clientSlice.map((row) => <tr key={row.name}><td title={row.name}><b>{row.name}</b><small>{row.line}</small></td><td><span className={row.status === "Active" ? "badge success" : "badge neutral"}>{row.status}</span></td><td className="num">{formatFull(row.revenue, "AED").replace("AED\u00A0", "")}</td></tr>)}</tbody></table></div>
+      <div className="pager"><span>{clientPage * pageSize + 1}–{Math.min(clients.length, (clientPage + 1) * pageSize)} of {clients.length}</span><button type="button" className="btn ghost sm" disabled={clientPage === 0} onClick={() => setClientPage((page) => page - 1)}>Previous</button><button type="button" className="btn ghost sm" disabled={(clientPage + 1) * pageSize >= clients.length} onClick={() => setClientPage((page) => page + 1)}>Next</button></div>
+    </section>
+      <section className="card chart-card data-table span-6">
+      <div className="card-h"><h3>Open pipeline</h3><span className="meta">Gross AED {formatFull(model.grossOpen || 0, "AED").replace("AED\u00A0", "")} · weighted {formatFull(model.weighted, "AED")}</span><span className="badge neutral">Sample</span></div>
+      <div className="tbl-wrap"><table className="tbl"><thead><tr><th>Client</th><th>Stage</th><th className="num">Value</th><th className="num">Prob.</th><th className="num">Weighted</th></tr></thead><tbody>{dealSlice.map((row) => <tr key={`${row.client}-${row.stage}`}><td title={row.client}>{row.client}</td><td>{row.stage}</td><td className="num">{row.value.toLocaleString("en-AE")}</td><td className="num">{row.prob}%</td><td className="num">{row.weighted.toLocaleString("en-AE")}</td></tr>)}</tbody></table></div>
+      <div className="pager"><span>{dealPage * pageSize + 1}–{Math.min(deals.length, (dealPage + 1) * pageSize)} of {deals.length}</span><button type="button" className="btn ghost sm" disabled={dealPage === 0} onClick={() => setDealPage((page) => page - 1)}>Previous</button><button type="button" className="btn ghost sm" disabled={(dealPage + 1) * pageSize >= deals.length} onClick={() => setDealPage((page) => page + 1)}>Next</button></div>
+    </section>
+  </>;
+}
+
+function OpportunityList({ items, reload }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void> }) {
   if (!items.length) return null;
-  return <section className="card pad span-12 fixes-card"><div className="ch"><h2>{title}</h2><span className="badge neutral">Sample</span></div><div className="fixes">{items.slice(0, 4).map((item) => <article className="fix" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : formatFull(item.impactAed, "AED")}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details><button type="button" className="btn ghost sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</div></section>;
+  return <>{items.slice(0, 4).map((item) => <article className="card fix span-3" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : formatFull(item.impactAed, "AED")}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details><button type="button" className="btn ghost sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</>;
+}
+
+function DeptFacts({ name, model }: { name: string; model?: Access["model"] }) {
+  const row = model?.hours?.find((item) => item.department === name);
+  if (!row) return null;
+  const util = row.available ? Math.round((row.hours / row.available) * 1000) / 10 : 0;
+  const bill = row.available ? Math.round((row.billable / row.available) * 1000) / 10 : 0;
+  const utilTarget = model?.targets?.find((item) => item.metric === "utilisation_pct" && item.subject === name)?.value;
+  const billTarget = model?.targets?.find((item) => item.metric === "billable_pct" && item.subject === name)?.value;
+  const gross = model?.grossOpen || 0;
+  const dealCount = model?.openDeals?.length || 0;
+  const utilBelow = utilTarget != null && util < utilTarget;
+  const billBelow = billTarget != null && bill < billTarget;
+  return <div className="kpi-row">
+    <article className={`kpi-tile ${utilBelow ? "below" : ""}`}><span className="kpi-label">Utilisation</span><span className="kpi-value">{util.toFixed(1)}%</span><span className="kpi-target">{utilTarget == null ? "No target in the sample file" : `Target ${utilTarget}% · October 2026`}</span>{utilTarget == null ? <span className="badge neutral">No target</span> : utilBelow ? <span className="badge low">▼ Below target</span> : <span className="badge success">✓ On target</span>}</article>
+    <article className={`kpi-tile ${billBelow ? "below" : ""}`}><span className="kpi-label">Billable</span><span className="kpi-value">{bill.toFixed(1)}%</span><span className="kpi-target">{billTarget == null ? "No target in the sample file" : `Target ${billTarget}%`}</span>{billTarget == null ? <span className="badge neutral">No target</span> : billBelow ? <span className="badge low">▼ Below target</span> : <span className="badge success">✓ On target</span>}</article>
+    <article className="kpi-tile"><span className="kpi-label">Gross open pipeline</span><span className="kpi-value">{formatCompact(gross, "AED")}</span><span className="kpi-target">{dealCount} deals · AED {gross.toLocaleString("en-AE")} gross</span></article>
+    <article className="kpi-tile"><span className="kpi-label">Win rate</span><span className="kpi-value">{model?.winRate == null ? "—" : `${model.winRate.toFixed(1)}%`}</span><span className="kpi-target">Closed deals, all departments</span></article>
+  </div>;
 }
 
 function Bots({ hash, state, reload }: { hash: string; state: Access; reload: () => Promise<void> }) {
@@ -468,8 +520,9 @@ function Bots({ hash, state, reload }: { hash: string; state: Access; reload: ()
       <p className="note"><a href="#bots">Businessbots</a> / {department.name}</p>
       <h1>{department.name}</h1>
       <p className="sub">{department.mandate}</p>
-      <div className="controls"><a className="btn ghost" href="#bots">All departments</a><a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "badge success" : "badge neutral"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : "Not confirmed"}</span></div>
+      <div className="controls"><label>Department<select aria-label="Department" value={department.id} onChange={(event) => { window.location.hash = `#bots/${event.target.value}`; }}>{catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "badge success" : "badge neutral"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : "Not confirmed"}</span></div>
     </header>
+    <DeptFacts name={department.name} model={state.model} />
     <BotDesk departmentId={department.id} process={process} state={state} reload={reload} />
     {state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>Confirm this department</button>}
   </>;
@@ -480,8 +533,14 @@ function BotDesk({ departmentId, process, state, reload }: { departmentId: strin
   const saved = (state.automations || []).filter((item) => item.departmentId === departmentId);
   const partners = state.departments.filter((item) => item.id !== departmentId);
   const spec = map ? processSpec(map) : null;
+  const stages = stageSpec(state.model?.openDeals || []);
+  const deals = state.model?.openDeals || [];
   return <div className="board">
-    {spec ? <div className="chart-card span-12"><LiveChart spec={spec} /></div> : <p className="note span-12">Ingest the demo sources to load this department’s workflow file.</p>}
+    {spec ? <div className="chart-card span-7"><LiveChart spec={spec} /></div> : <p className="note span-12">Ingest the demo sources to load this department’s workflow file.</p>}
+    <div className="chart-card span-5"><LiveChart spec={stages} /></div>
+    <section className="card chart-card data-table span-12"><div className="card-h"><h3>Open deals</h3><span className="meta">Gross AED {(state.model?.grossOpen || 0).toLocaleString("en-AE")} · weighted AED {(state.model?.weighted || 0).toLocaleString("en-AE")}</span><span className="badge neutral">Sample</span></div>
+      <div className="tbl-wrap"><table className="tbl"><colgroup><col style={{ width: "28%" }} /><col style={{ width: "16%" }} /><col style={{ width: "16%" }} /><col style={{ width: "10%" }} /><col style={{ width: "14%" }} /><col style={{ width: "16%" }} /></colgroup><thead><tr><th>Client</th><th>Stage</th><th className="num">Value</th><th className="num">Prob.</th><th className="num">Weighted</th><th>Owner</th></tr></thead><tbody>{deals.map((row) => <tr key={`${row.client}-${row.stage}`}><td title={row.client}>{row.client}</td><td>{row.stage}</td><td className="num">{row.value.toLocaleString("en-AE")}</td><td className="num">{row.prob}%</td><td className="num">{row.weighted.toLocaleString("en-AE")}</td><td>{row.owner || row.department}</td></tr>)}</tbody></table></div>
+    </section>
     {process && map?.flows?.filter((flow) => flow.steps.length).map((flow) => <section className="card pad span-12" key={flow.title}><h2>{flow.title}</h2><p className="note">{flow.weeklyHours} h / week in the sample workflow file.</p><ol className="step-list">{flow.steps.map((step, index) => <li key={step}><b>{index + 1}.</b> <span>{sentence(step)}</span>{isBottleneck(step, map.friction || []) && <span className="badge low">▼ Bottleneck</span>}</li>)}</ol></section>)}
     {map?.proposals?.length ? <section className="card pad span-12"><div className="ch"><h2>Proposed automations</h2><span className="badge neutral">Sample</span></div><div className="fixes">{map.proposals.map((item) => <article className="fix" key={item.id}><h3>{item.name}</h3><ol className="step-list">{(item.steps || []).slice(0, 5).map((step, index) => <li key={step}><b>{index + 1}.</b> <span>{sentence(step)}</span></li>)}</ol><p className="note">{item.hoursSavedPerMonth} h / month. Tools: {item.tools?.join(", ") || "department checklist"}.</p><div className="impact">{item.impactAed == null ? "—" : `${formatFull(item.impactAed, "AED")} / month`}</div><p>{item.revenueAngle}</p><details className="how"><summary>How we calculated</summary><p>{item.assumption}. {item.formula}. {item.aedFormula}</p></details>{state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/automation", item); await reload(); }}>Build automation</button>}</article>)}</div></section> : null}
     {saved.length > 0 && <section className="card pad span-12"><div className="ch"><h2>Automations</h2><span className="badge neutral">Sample</span></div>{saved.map((item) => <div className="plainrow" key={item.id}><span /><span><b>{item.name}</b><small>{item.impactAed ? `${formatFull(item.impactAed, "AED")} / month. ` : ""}{item.runs.map((run) => run.note).join(" ") || "No runs yet."}</small></span><span><button type="button" className="btn ghost" onClick={async () => { await api("/api/brain/automation/toggle", { id: item.id }); await reload(); }}>{item.enabled ? "On" : "Off"}</button> <button type="button" className="btn" onClick={async () => { await api("/api/brain/automation/run", { id: item.id }); await reload(); }}>Simulated run</button></span></div>)}</section>}
@@ -492,10 +551,19 @@ function BotDesk({ departmentId, process, state, reload }: { departmentId: strin
 function processSpec(map: NonNullable<Access["workflowMaps"]>[string]): ChartSpec {
   const series = map.flows.filter((flow) => flow.steps.length).flatMap((flow) => {
     const each = flow.weeklyHours / Math.max(1, flow.steps.length);
-    return flow.steps.map((step) => ({ name: step, value: Math.round(each * 10) / 10, belowTarget: isBottleneck(step, map.friction || []), statusLabel: "Bottleneck" }));
+    return flow.steps.map((step) => ({ name: step, value: Math.round(each * 10) / 10, belowTarget: isBottleneck(step, map.friction || []), statusLabel: "▼ Bottleneck" }));
   }).sort((left, right) => right.value - left.value);
   const top = series[0];
-  return { id: "chart-process-hours", type: "bar", title: "Hours per week by step", unit: "h", sample: true, span: 12, series, aria: top ? `Hours per week by step. Highest: ${top.name} ${top.value} h.` : "Hours per week by step." };
+  return { id: "chart-process-hours", type: "bar", title: "Hours per week by step", unit: "h", sample: true, span: 7, mark: "green", series, aria: top ? `Hours per week by step. Highest: ${top.name} ${top.value} h.` : "Hours per week by step." };
+}
+
+function stageSpec(deals: { stage: string; value: number }[]): ChartSpec {
+  const preferred = ["Qualification", "Discovery", "Proposal", "Negotiation"];
+  const totals = new Map<string, number>();
+  for (const deal of deals) totals.set(deal.stage, (totals.get(deal.stage) || 0) + deal.value);
+  const names = [...preferred.filter((name) => totals.has(name)), ...[...totals.keys()].filter((name) => !preferred.includes(name))];
+  const series = names.map((name) => ({ name, value: totals.get(name) || 0 }));
+  return { id: "chart-pipeline-stage", type: "column", title: "Gross open pipeline by stage", unit: "AED", sample: true, span: 5, series, aria: series.length ? `Gross open pipeline by stage. ${series.map((item) => `${item.name} AED ${item.value}`).join(", ")}.` : "No open deals." };
 }
 
 function sentence(value: string) {
@@ -511,7 +579,7 @@ function isBottleneck(step: string, friction: string[]) {
 
 type ChatLine = { who: string; text?: string; bullets?: { label: string; value: number; unit?: string }[]; steps?: { tool: string; detail: string }[]; chartId?: string; chartLabel?: string; error?: boolean; retry?: string };
 
-function ChatDock({ open, onToggle, role, area, departmentId, onResult }: { open: boolean; onToggle: () => void; role: "customer" | "dev"; area: string; departmentId?: string; onResult: (result: Insight) => void }) {
+function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onResult }: { open: boolean; onToggle: () => void; role: "customer" | "dev"; area: string; departmentId?: string; placeholder?: string; onResult: (result: Insight) => void }) {
   const [text, setText] = useState("");
   const [asking, setAsking] = useState(false);
   const [lines, setLines] = useState<ChatLine[]>([{ who: "BusinessBrain", text: "Ask a question about your business. Charts update with the answer." }]);
@@ -578,11 +646,12 @@ function ChatDock({ open, onToggle, role, area, departmentId, onResult }: { open
       </div>
     </article>)}</div>}
     <div className="chat-bar">
+      {!open && <span className="dock-mark" aria-hidden="true">EC</span>}
       <div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="chip" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div>
       <form className="ask" onSubmit={ask}>
-        <textarea aria-label="Question" rows={1} value={text} placeholder="Ask about revenue, pipeline or utilisation" onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} />
+        <textarea aria-label="Question" rows={1} value={text} placeholder={placeholder || "Ask about revenue, pipeline or utilisation"} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} />
         <button className="btn" type="submit" disabled={asking}>Ask</button>
-        <button type="button" className="btn ghost" aria-expanded={open} onClick={onToggle}>{open ? "Collapse" : "Expand"}</button>
+        <button type="button" className="btn ghost icon-btn" aria-label={open ? "Collapse chat" : "Expand chat"} aria-expanded={open} onClick={onToggle}>{open ? "▾" : "▴"}</button>
       </form>
     </div>
   </aside>;

@@ -106,7 +106,7 @@ function round(value) {
 
 function compactAed(value) {
   const abs = Math.abs(Number(value) || 0);
-  if (abs >= 1_000_000) return `AED ${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000_000) return `AED ${(Math.round(abs / 10_000) / 100).toFixed(2)}M`;
   if (abs >= 10_000) return `AED ${Math.round(abs / 1000)}K`;
   return `AED ${Math.round(abs).toLocaleString("en-AE")}`;
 }
@@ -191,7 +191,10 @@ export function projectModel(datasets) {
   return {
     ready: revenueRows.length > 0,
     revenue: revenueRows.map((row) => ({ month: row.month, label: row.month_label || monthName(row.month), line: row.service_line, value: Number(row.revenue_aed) || 0 })),
-    hours: hourRows.map((row) => ({ department: row.department, hours: Number(row.hours_utilized_oct_2026) || 0, available: Number(row.hours_available_oct_2026) || 0, billable: Number(row.billable_hours_oct_2026) || 0 })),
+    hours: hourRows.map((row) => ({ department: row.department, headcount: Number(row.headcount) || 0, hours: Number(row.hours_utilized_oct_2026) || 0, available: Number(row.hours_available_oct_2026) || 0, billable: Number(row.billable_hours_oct_2026) || 0 })),
+    clients: (datasets?.clients?.rows || []).map((row) => ({ name: row.client_name, line: row.service_line, status: row.status, revenue: Number(row.revenue_recognized_ttm_aed) || 0 })).sort((left, right) => right.revenue - left.revenue),
+    openDeals: open.map((row) => ({ client: row.client_name, stage: row.stage, value: Number(row.value_aed) || 0, prob: Number(row.win_probability_pct) || 0, weighted: Math.round(Number(row.value_aed) * Number(row.win_probability_pct) / 100), department: row.department, owner: row.owner_role })).sort((left, right) => right.weighted - left.weighted),
+    grossOpen: Math.round(open.reduce((sum, row) => sum + (Number(row.value_aed) || 0), 0)),
     stages: [...stages.entries()].map(([name, value]) => ({ name, value: Math.round(value) })),
     risk: [...risk.entries()].map(([name, value]) => ({ name, value: Math.round(value) })),
     winRate: won.length + lost.length ? Math.round((won.length / (won.length + lost.length)) * 1000) / 10 : null,
@@ -260,28 +263,26 @@ function overviewCharts(model, rows, period, mode, actions) {
     const full = rows.find((row) => row.month === month)?.label || monthName(month);
     return { name: full.slice(0, 3), value, target: monthTarget, belowTarget: monthTarget != null && value < monthTarget };
   });
-  const lines = chartSpec("chart-revenue-lines", "bar", `Revenue by service line, ${period.label}`, "AED", lineSeries, 8);
+  const lines = chartSpec("chart-revenue-lines", "bar", `Revenue by service line, ${period.label}`, "AED", lineSeries, 8, "blue");
   const columns = { ...chartSpec("chart-revenue-months", "column", `Revenue by month, ${period.label}`, "AED", monthSeries, 12), target: monthTarget, targetLabel: monthTarget == null ? "" : "Target" };
   const slices = lineSeries.length > 5 ? [...lineSeries.slice(0, 5), { name: "Other", value: lineSeries.slice(5).reduce((sum, item) => sum + item.value, 0) }] : lineSeries.map((item) => ({ name: item.name, value: item.value }));
   const mix = { ...chartSpec("chart-revenue-share", "donut", `Revenue mix, ${period.label}`, "AED", slices, 4), total: lineSeries.reduce((sum, item) => sum + item.value, 0) };
-  if (mode === "utilisation") {
-    const series = model.hours.map((row) => {
-      const value = row.available ? Math.round((row.hours / row.available) * 1000) / 10 : 0;
-      const target = findTarget(model, "utilisation_pct", row.department);
-      return { name: row.department, value, target, belowTarget: target != null && value < target };
-    }).sort((left, right) => right.value - left.value);
-    return [chartSpec("chart-utilisation", "bar", "Utilisation by department, October 2026", "%", series, 12)];
-  }
   if (mode === "pipeline") return [chartSpec("chart-pipeline", "bar", "Pipeline by stage", "AED", capCategories(model.stages.map((row) => ({ name: row.name, value: row.value, belowTarget: false })).sort((left, right) => right.value - left.value), 10), 12)];
   if (mode === "risk") return [chartSpec("chart-risk", "bar", "Open pipeline below 40% probability", "AED", model.risk.map((row) => ({ name: row.name, value: row.value, belowTarget: false })), 12)];
   if (mode === "actions") return [chartSpec("chart-actions", "bar", "Revenue actions", "AED", actions.slice(0, 5).map((item) => ({ name: item.title, value: item.impactAed || 0, belowTarget: false })), 12)];
+  const utilisation = chartSpec("chart-utilisation", "bar", "Utilisation by department, October 2026", "%", model.hours.map((row) => {
+    const value = row.available ? Math.round((row.hours / row.available) * 1000) / 10 : 0;
+    const target = findTarget(model, "utilisation_pct", row.department);
+    return { name: row.department, value, target, belowTarget: target != null && value < target, statusLabel: "▼ Below target" };
+  }).sort((left, right) => right.value - left.value), 6, "green");
   if (mode === "donut") return [mix, columns];
-  return [lines, mix, columns];
+  if (mode === "utilisation") return [utilisation, lines, mix];
+  return [lines, mix, { ...columns, span: 6 }, utilisation];
 }
 
-function chartSpec(id, type, title, unit, series, span) {
+function chartSpec(id, type, title, unit, series, span, mark = "blue") {
   const top = series[0];
-  return { id, type, title, unit, sample: true, span, series, aria: top ? `${title}. Highest: ${top.name} ${top.value} ${unit}.` : `${title}. No rows.` };
+  return { id, type, title, unit, sample: true, span, mark, series, aria: top ? `${title}. Highest: ${top.name} ${top.value} ${unit}.` : `${title}. No rows.` };
 }
 
 export function chartSummary(spec) {
