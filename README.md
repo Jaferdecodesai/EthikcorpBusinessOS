@@ -71,6 +71,26 @@ GitHub and Drive enforce their own permissions on archived originals and citatio
 
 Keep the hosted Node build separate from the sample Workers. Verify the configured deployment with a developer, a CEO, and two department accounts before using real source files. [Cloudflare self-hosted Access setup](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/) · [Cloudflare token verification](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/).
 
+## Deploy to Hostinger
+
+Create a **Node.js Web App** in hPanel. Connect this repository and select the `codex/businessos-mvp` branch, or upload the Hostinger ZIP with `package.json` at the archive root.
+
+| hPanel setting | Value |
+| --- | --- |
+| Framework preset | Other |
+| Node.js | 22.x |
+| Root directory | `web` for GitHub or the archive root for ZIP upload |
+| Package manager | npm |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Entry file | `app.cjs` |
+
+Before deploying, add the team origin, Access issuer, Access application audience, and team roster from the Shared team workspace table above. The team origin must match the public HTTPS hostname served through Cloudflare Access. Add the GitHub and Drive settings from `.env.example` in hPanel to enable uploads.
+
+Set `BRAIN_DATA_FILE` and `DEPARTMENT_STORE_PATH` to distinct absolute paths in a private, writable directory that persists across deployments. Use a directory outside `hbuilds` and `public_html`. The app uses the port assigned by the host. After deploying, sign in at the team hostname and open `/api/health` to confirm it reports `"mode":"team"`. Verify both upload destinations from BusinessBrain PM before importing business files.
+
+[Hostinger Node.js deployment](https://www.hostinger.com/support/how-to-deploy-a-nodejs-website-in-hostinger/) · [Hostinger environment variables](https://www.hostinger.com/support/how-to-add-environment-variables-during-node-js-application-deployment/)
+
 ## Test
 
 ```bash

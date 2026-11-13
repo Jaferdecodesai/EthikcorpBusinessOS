@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.13.0 || ^24.0.0"
+  },
   "scripts": {
     "dev": "node server/index.mjs",
+    "start": "node app.cjs",
     "start:team": "node server/index.mjs --require-team",
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/*.test.mjs",

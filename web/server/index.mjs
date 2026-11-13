@@ -32,7 +32,7 @@ const github = new Github(process.env.GITHUB_TOKEN || "");
 const localSecret = process.env.SESSION_SECRET || "local-cloudflare-preview-only-secret-not-for-deployment";
 const localBuild = process.env.BRAIN_LOCAL_DEVELOPMENT === "true" && process.env.PORTAL_MODE !== "customer";
 const team = teamConfig(process.env);
-if (process.argv.includes("--require-team")) {
+if (process.env.BRAIN_REQUIRE_TEAM === "true" || process.argv.includes("--require-team")) {
   if (!team) throw new Error("Configure Cloudflare Access and the team roster before starting the team portal.");
   const stores = [process.env.BRAIN_DATA_FILE, process.env.DEPARTMENT_STORE_PATH];
   if (!stores.every((file) => file && path.isAbsolute(file)) || path.resolve(stores[0]) === path.resolve(stores[1])) {
