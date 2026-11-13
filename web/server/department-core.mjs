@@ -10,13 +10,16 @@ export function required(value, name, max = 500) { if (typeof value !== "string"
 const optional = (v, max = 2000) => typeof v === "string" ? v.trim().slice(0, max) : "";
 function dateOnly(value) { const date=optional(value,100);if(!date)return "";if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date)throw new Error("Invalid due date.");return date; }
 
+const emptyDepartment = () => ({ settings: { owner: "", paused: false }, tasks: [], runs: [], automations: [], memory: [], messages: [], events: [] });
+
 export function createDepartmentStoreCore(initialState, save) {
   let state = structuredClone(initialState || { version: 1, departments: {} });
-  for (const department of departments) if (!state.departments[department.id]) state.departments[department.id] = { settings: { owner: "", paused: false }, tasks: [], runs: [], memory: [], messages: [], events: [] };
+  for (const department of departments) if (!state.departments[department.id]) state.departments[department.id] = emptyDepartment();
   for (const data of Object.values(state.departments)) for (const run of data.runs || []) if (run.status === "running") { run.status = "interrupted"; run.error = "The server restarted before a final receipt was saved. Reconcile the original run ID in the configured runtime before retrying."; }
   const get = (slug) => { if (!departments.some((d) => d.id === slug)) throw new Error("Department not found."); return state.departments[slug]; };
   const commit = (next) => { save(next); state = next; };
   return {
+    reset: () => commit({ version: 1, departments: Object.fromEntries(departments.map(({ id: key }) => [key, emptyDepartment()])) }),
     get: (slug) => structuredClone(get(slug)),
     update(slug, fn, event) {
       const draft = structuredClone(get(slug)); const result = fn(draft);
@@ -42,14 +45,15 @@ export function createDepartmentStoreCore(initialState, save) {
 export function localDraft(definition, workflow, input) {
   const request = required(input.objective, workflow.inputLabel, 6000);
   const evidence = optional(input.sourceRefs, 2000);
-  return `# ${workflow.name}\n\nPrepared for ${definition.name}. Local structured template; no model inference or source retrieval.\n\n## Supplied brief\n${request}\n\n## Supplied source references\n${evidence || "No references supplied. Add approved source IDs and versions before review."}\n\n${workflow.sections.map((section) => `## ${section}\n[Reviewer to complete from the supplied brief and approved evidence.]`).join("\n\n")}\n\n## Release check\nNamed reviewer: ${optional(input.reviewer, 120) || "Not assigned"}. Verify facts, source rights and current versions. External action requires a separate approved execution route.`;
+  const retrieved = optional(input.releaseRefs, 2000);
+  return `# ${workflow.name}\n\nPrepared for ${definition.name}. Local structured draft for review.\n\n## Supplied brief\n${request}\n\n## Supplied source references\n${evidence || "No references supplied."}${retrieved ? `\n\n## BusinessBrain citations\n${retrieved}` : ""}\n\n${workflow.sections.map((section) => `## ${section}\n[Reviewer to complete from the supplied brief and approved evidence.]`).join("\n\n")}\n\n## Release check\nNamed reviewer: ${optional(input.reviewer, 120) || "Not assigned"}. Verify facts, source rights and current versions. External action requires a separate approved execution route.`;
 }
 export function localLead(definition, data, prompt) {
   const open = data.tasks.filter((t) => t.status !== "done"); const blocked = open.filter((t) => t.status === "blocked"); const reviews = data.runs.filter((r) => r.status === "pending_review");
   return `Local workspace plan for ${definition.name}\n\nRequest recorded: ${prompt}\n\n${definition.focus}\n\nCurrent records: ${open.length} open tasks, ${blocked.length} blocked, ${reviews.length} drafts awaiting review, ${data.memory.filter((m) => m.active).length} active memory notes.\n\nNext actions\n${!data.settings.owner ? "- Name the department lead.\n" : ""}${open.slice(0,3).map((t) => `- ${t.title} — ${t.owner || "assign an owner"}${t.dueDate ? `; due ${t.dueDate}` : "; set a due date"}.`).join("\n") || "- Add a work item or use a starter task."}\n${reviews.length ? "- Review the pending workflow drafts before using their content.\n" : ""}\nThis plan is generated from local records using rules. Select Lobu when the approved persistent specialist is configured.`;
 }
 
-export async function handleDepartmentApi(req, res, { store, config, readJson, json }) {
+export async function handleDepartmentApi(req, res, { store, config, readJson, json, resolveEvidence, canValidate = false, actor = "Local operator" }) {
   const url = new URL(req.url, "http://localhost");
   const segments = url.pathname.split("/").filter(Boolean);
   if (url.pathname === "/api/runtime/status" && req.method === "GET") return json(res, 200, runtimeStatus(config));
@@ -59,6 +63,27 @@ export async function handleDepartmentApi(req, res, { store, config, readJson, j
   if (segments.length === 3 && req.method === "GET") return json(res, 200, { definition, ...data });
   if (segments[3] === "export" && req.method === "GET") return json(res, 200, { exportedAt: now(), definition, ...data });
   const body = await readJson(req);
+  if (segments[3] === "automations" && segments.length === 4 && req.method === "POST") {
+    const name = required(body.name, "Automation name", 120);
+    const trigger = required(body.trigger, "Trigger", 240);
+    const steps = required(body.steps, "Automation steps", 4000).split(/\r?\n/).map((step) => step.trim()).filter(Boolean);
+    if (steps.length > 12 || steps.some((step) => step.length > 300)) throw new Error("Enter up to 12 steps, each at most 300 characters.");
+    const automation = { id: id(), name, trigger, steps, createdAt: now(), createdBy: actor, status: "pending_review", hash: hash(JSON.stringify([name, trigger, steps])) };
+    store.update(slug, (draft) => { draft.automations ||= []; draft.automations.unshift(automation); }, { kind: "automation", title: `Proposed ${name}` });
+    return json(res, 201, automation);
+  }
+  if (segments[3] === "automations" && segments[5] === "review" && segments.length === 6 && req.method === "POST") {
+    if (!canValidate) return json(res, 403, { error: "Only the CEO can validate an automation." });
+    if (!["approve", "reject"].includes(body.decision)) throw new Error("Choose approve or reject.");
+    const note = required(body.note, "Review note", 2000);
+    store.update(slug, (draft) => {
+      const automation = (draft.automations || []).find(({ id }) => id === segments[4]);
+      if (!automation || automation.status !== "pending_review" || body.hash !== automation.hash) throw new Error("This automation changed or has already been reviewed.");
+      automation.status = body.decision === "approve" ? "approved" : "rejected";
+      automation.review = { reviewer: actor, note, at: now(), hash: automation.hash };
+    }, { kind: "automation", title: `Automation review by ${actor}` });
+    return json(res, 200, store.get(slug));
+  }
   if (segments[3] === "settings" && req.method === "PATCH") {
     store.update(slug, (draft) => { draft.settings = { owner: optional(body.owner, 120), paused: Boolean(body.paused) }; }, { kind: "settings", title: "Department lead settings updated" }); return json(res, 200, store.get(slug));
   }
@@ -96,11 +121,15 @@ export async function handleDepartmentApi(req, res, { store, config, readJson, j
     store.update(slug,(draft)=>draft.messages.push({id:id(),role:"assistant",...reply,mode,at:now()}),{kind:"lead",title:`Lead response: ${reply.status}`});return json(res,200,store.get(slug));
   }
   if(segments[3]==="runs"&&segments.length===4&&req.method==="POST"){
-    if(data.settings.paused)throw new Error("The department lead is paused.");const workflow=definition.workflows.find((w)=>w.id===body.workflowId);if(!workflow)throw new Error("Workflow not found in this department.");const objective=required(body.objective,"Workflow brief",6000);const mode=body.mode==="sim"?"sim":"local";
+    if(data.settings.paused)throw new Error("The department lead is paused.");
+    const custom = (data.automations || []).find((item) => item.id === body.workflowId && item.status === "approved");
+    const workflow = definition.workflows.find((item) => item.id === body.workflowId) || (custom && { id: custom.id, name: custom.name, inputLabel: "Workflow brief", sections: custom.steps });
+    if (!workflow) throw new Error("Choose an approved automation or department template.");
+    const objective=required(body.objective,"Workflow brief",6000);const mode=!custom&&body.mode==="sim"?"sim":"local";
     const run={id:id(),workflowId:workflow.id,name:workflow.name,mode,status:"running",input:{objective,sourceRefs:optional(body.sourceRefs,2000),reviewer:optional(body.reviewer,120)},createdAt:now()};
     if(mode==="sim"&&typeof config.simMap[workflow.id]==="string")Object.assign(run,{remoteWorkflowId:config.simMap[workflow.id],remoteRunId:run.id});
     store.update(slug,(draft)=>draft.runs.unshift(run),{kind:"workflow",title:`Started ${workflow.name}`,runId:run.id});
-    let result;try{if(mode==="local")result={status:"pending_review",output:localDraft(definition,workflow,run.input)};else {const receipt=await executeSim(config,workflow.id,{...run.input,department:slug},run.id);result={...receipt,status:receipt.remoteStatus==="completed"?"pending_review":receipt.remoteStatus==="failed"?"failed":"queued",output:receipt.output?JSON.stringify(receipt.output,null,2):""};}}catch(error){result={status:error.uncertain?"needs_reconciliation":"failed",error:error.message,output:""};}
+    let result;try{if(mode==="local")result={status:"pending_review",output:localDraft(definition,workflow,{...run.input,releaseRefs:resolveEvidence?.(slug,objective)})};else {const receipt=await executeSim(config,workflow.id,{...run.input,department:slug},run.id);result={...receipt,status:receipt.remoteStatus==="completed"?"pending_review":receipt.remoteStatus==="failed"?"failed":"queued",output:receipt.output?JSON.stringify(receipt.output,null,2):""};}}catch(error){result={status:error.uncertain?"needs_reconciliation":"failed",error:error.message,output:""};}
     store.update(slug,(draft)=>Object.assign(draft.runs.find((r)=>r.id===run.id),result,{outputHash:hash(result.output||""),updatedAt:now()}),{kind:"workflow",title:`${workflow.name}: ${result.status}`,runId:run.id});return json(res,201,store.get(slug));
   }
   if(segments[3]==="runs"&&segments[5]==="refresh"&&req.method==="POST"){

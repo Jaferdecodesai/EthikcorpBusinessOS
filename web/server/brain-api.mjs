@@ -5,6 +5,7 @@ import { runAgent } from "./agent.mjs";
 import { DEMO_DRIVE, DEMO_GITHUB, buildFromDemo, demoPlan, ingestDemoFile } from "./demo-intake.mjs";
 import { llmStatus } from "./llm/status.mjs";
 import { buildSemanticLayer } from "./semantic.mjs";
+import { visibleBusinessTables } from "./business-intake.mjs";
 
 function finetuneStatus(instruction) {
   if (instruction?.validated) return { status: "not_executed", detail: `${instruction.pairs}-pair dataset exported and validated. The LoRA run has not been executed.` };
@@ -14,7 +15,9 @@ function finetuneStatus(instruction) {
 export function publicBrain(brain, role, connectors, env = {}) {
   const current = brain || emptyBrain();
   const access = portalAccess(role, current, env);
-  const analysis = analyzeRevenue(current.datasets || {});
+  const uploaded = current.businessMode === "uploaded";
+  const tables = visibleBusinessTables(current);
+  const analysis = uploaded ? { opportunities: [] } : analyzeRevenue(tables);
   return {
     ...access,
     documents: (current.documents || []).map((document) => ({ id: document.id, name: document.name, sourceId: document.sourceId, characters: document.text.length, sample: document.sourceId === "sample" })),
@@ -27,8 +30,9 @@ export function publicBrain(brain, role, connectors, env = {}) {
     semantic: current.semantic || buildSemanticLayer(),
     quality: current.quality || null,
     demo: { github: current.demo?.github || DEMO_GITHUB, driveUrl: current.demo?.driveUrl || DEMO_DRIVE, sha: current.demo?.sha || current.quality?.sha || "", needsReingest: Boolean(current.demo?.needsReingest), drive: current.demo?.drive || null, filesTotal: current.demo?.filesTotal || 0, filesDone: current.demo?.filesDone || 0, log: current.demo?.log || [] },
-    datasets: Object.entries(current.datasets || {}).map(([id, table]) => ({ id, rows: table.rows?.length || 0, sample: true, pass: table.validation?.pass !== false })),
-    model: { ...projectModel(current.datasets || {}), updated: current.quality?.fetchedAt || "" },
+    businessMode: uploaded ? "uploaded" : "demo",
+    datasets: Object.entries(tables).map(([id, table]) => ({ id, rows: table.rows?.length || 0, sample: !uploaded, pass: table.validation?.pass !== false, source: table.source, url: table.url, importedAt: table.importedAt, handoffId: table.handoffId })),
+    model: { ...projectModel(tables, uploaded), updated: uploaded ? Object.values(tables).map((table) => table.importedAt).sort().at(-1) || "" : current.quality?.fetchedAt || "" },
     opportunities: analysis.opportunities,
     pins: current.pins || [],
     tasks: current.tasks || [],

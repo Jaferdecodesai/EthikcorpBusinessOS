@@ -1,10 +1,19 @@
 import React, { useEffect, useState } from "react";
 import catalog from "../shared/departments.json";
 import { SOURCES } from "../phase1/customer-logic.mjs";
+import { BUILD_STAGES } from "../shared/brain-stages.mjs";
 import { KpiTile, LiveChart, type ChartSpec, type KpiModel } from "./charts";
 import { buildOverview } from "../server/datasets.mjs";
 import { formatCompact, formatFull } from "./format";
+import { DepartmentSupervision } from "./department-supervision";
+import { BUSINESS_TABLES } from "../server/business-intake.mjs";
 
+type Destination = { status: string; detail?: string; url?: string };
+type HandoffReceipt = { id: string; stage: string; name: string; indexed: boolean; withdrawnAt?: string; restoring?: boolean; pages?: number; textPages?: number; destinations: Record<"github" | "drive", Destination> };
+type SourceInventory = {
+  sources: { id: string; name: string; sourceId: string; audience: string; revisions: number; serving: boolean; current: boolean; eligible: boolean }[];
+  withdrawals: { name: string; sourceId: string; reason: string; actor: string; at: string; revisions: number }[];
+};
 type Access = {
   role: "customer" | "dev";
   portalMode?: "production" | "customer" | "aqionteam";
@@ -24,7 +33,9 @@ type Access = {
   indexLayer?: { retrieval?: string; semantic?: string };
   demo?: { github: string; driveUrl: string; sha?: string; needsReingest?: boolean; drive: { status: string; detail: string } | null; filesTotal: number; filesDone: number; log: { path: string; sample?: boolean }[] };
   quality?: { sha: string; fetchedAt: string; files: Record<string, { path: string; source: string; status?: string; reason?: string; driveId?: string; rows: number; passages?: number; pass: boolean; schema?: { name: string; type: string }[] }>; cross?: { pass: boolean; checks: { name: string; pass: boolean; detail: string }[] } };
-  datasets?: { id: string; rows: number }[];
+  datasets?: { id: string; rows: number; source?: string; url?: string; handoffId?: string }[];
+  workspaceId?: string;
+  businessMode?: "uploaded" | "demo";
   model?: { ready: boolean; updated?: string; grossOpen?: number; revenue: { month: string; label: string; line: string; value: number }[]; hours: { department: string; headcount?: number; hours: number; available: number; billable: number }[]; clients?: { name: string; line: string; status: string; revenue: number }[]; openDeals?: { client: string; stage: string; value: number; prob: number; weighted: number; department: string; owner: string }[]; stages: { name: string; value: number }[]; risk: { name: string; value: number }[]; winRate: number | null; winRateValue: number | null; weighted: number; targets: { metric: string; subject: string; value: number; unit: string; goodDirection: string }[] };
   opportunities?: { id: string; title: string; impactAed: number; formula: string; confidence: string; owner: string }[];
   pins?: { id: string; type: string; title: string; sample?: boolean; unit?: string; categories?: string[]; series: { name: string; value?: number; values?: number[] }[] }[];
@@ -32,6 +43,11 @@ type Access = {
   automations?: { id: string; departmentId: string; name: string; enabled: boolean; impactAed?: number | null; runs: { at: string; note: string }[] }[];
   workflowMaps?: Record<string, { flows: { title: string; weeklyHours: number; steps: string[] }[]; friction: string[]; proposals: { id: string; name: string; trigger: string; steps: string[]; chain?: string; tools?: string[]; schedule: string; hoursSavedPerMonth: number; formula: string; impactAed: number | null; aedFormula: string; revenueAngle: string; assumption: string }[] }>;
   llm?: { provider: string; model: string | null; region: string; embedding: string; azure: { missing: string[] } };
+  handoff?: { connectors: Record<"github" | "drive", { ready: boolean; missing: string[]; destination: string }>; receipts: HandoffReceipt[] };
+  sourceInventory?: SourceInventory;
+  workspace?: { mode: "local" | "team"; role: "dev" | "ceo" | "head"; department?: string };
+  releaseModel?: { mode: "azure" | "extractive"; approved: boolean; deployment: string | null; missing: string[]; invalid: boolean };
+  release?: { candidates: number; canDeploy: boolean; needsGolden?: boolean; pendingChanges: boolean; evaluation: { passed: boolean; checks: { name: string; citation: boolean; excluded: boolean }[]; profile?: string; validationChecks?: { expectedDocument: string | null; department: string | null; match: string | null; passed: boolean }[] } | null; active: { id: string; deployedAt: string; documents: number; departments: string[]; contentVersion?: string } | null };
 };
 
 function faceFor(_id: string) {
@@ -106,6 +122,8 @@ export function BusinessApp() {
   const [state, setState] = useState<Access | null>(null);
   const [error, setError] = useState("");
   const [navOpen, setNavOpen] = useState(false);
+  const pageRef = React.useRef<HTMLDivElement>(null);
+  const stateRequest = React.useRef(0);
   const [ceoView, setCeoView] = useState(true);
   const [chatOpen, setChatOpen] = useState(() => {
     const stored = localStorage.getItem("bos-chat");
@@ -119,9 +137,17 @@ export function BusinessApp() {
     });
   }
   async function reload() {
-    try { setState(await api("/api/brain/state")); setError(""); }
-    catch (reason) { setError((reason as Error).message); }
+    const request = ++stateRequest.current;
+    try {
+      const next = await api("/api/brain/state");
+      if (request === stateRequest.current) { setState(next); setError(""); }
+    } catch (reason) {
+      if (request === stateRequest.current) setError((reason as Error).message);
+    }
   }
+  useEffect(() => {
+    pageRef.current?.scrollTo({ top: 0 });
+  }, [hash]);
   useEffect(() => {
     const dock = document.querySelector<HTMLElement>(".chat-dock");
     if (!dock) return;
@@ -145,19 +171,26 @@ export function BusinessApp() {
     window.addEventListener("hashchange", onHash);
     return () => { window.clearInterval(timer); window.removeEventListener("hashchange", onHash); };
   }, []);
-  const raw = hash.replace("#", "") || "pm";
+  const team = state?.workspace?.mode === "team";
+  const assigned = state?.workspace?.department;
+  const home = assigned ? `#bots/${assigned}` : team && state.workspace?.role === "ceo" ? "#brain" : "#pm";
+  const route = assigned ? `#bots/${assigned}${hash === `#bots/${assigned}/process` ? "/process" : ""}` : hash === "#pm" ? home : hash;
+  const raw = route.replace("#", "") || "pm";
   const tab = raw.startsWith("bots/") ? "bots" : (raw === "dev" || raw === "customer" || raw === "builder" ? "pm" : raw);
   const current = state?.tabs.find((item) => item.id === tab);
   const customerPortal = state?.portalMode === "customer";
-  const allowed = customerPortal ? Boolean(current?.enabled) : (!current || current.enabled);
+  const allowed = customerPortal || team ? Boolean(current?.enabled) : (!current || current.enabled);
+  const departmentId = raw.startsWith("bots/") ? raw.split("/")[1] : undefined;
+  const businessChat = tab === "brain" && state?.businessMode === "uploaded";
+  const showChat = (tab !== "bots" || Boolean(departmentId)) && (!team || Boolean(allowed && (businessChat || (state.release?.active && (tab === "brain" || (tab === "bots" && departmentId && state.release.active.departments.includes(departmentId)))))));
   const pageName = tab === "brain" ? "Business overview" : tab === "bots" ? "Businessbots" : "BusinessBrain PM";
-  return <div className={`portal ${chatOpen ? "chat-open" : "chat-collapsed"} ${navOpen ? "nav-open" : ""}`}>
+  return <div className={`portal ${chatOpen ? "chat-open" : "chat-collapsed"} ${navOpen ? "nav-open" : ""} ${departmentId ? "department-page" : ""}`}>
     {navOpen && <button type="button" className="nav-scrim" aria-label="Close navigation" onClick={() => setNavOpen(false)} />}
     <aside className="side" aria-label="Ethikcorp BusinessOS">
       <div className="side-stick">
-      <a className="brand" href="#pm"><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
-      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain PM", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => item.enabled ? <a key={item.id} className={tab === item.id ? "nav on" : "nav"} href={`#${item.id}`} onClick={() => setNavOpen(false)}>{item.label}</a> : <a key={item.id} className="nav dim" href={`#${item.id}`} title={customerPortal && !state?.ownershipReady ? "Opens after Step 1, Source ownership" : "This opens when the build reaches it"} onClick={() => setNavOpen(false)}>{item.label}</a>)}</nav>
-      <div className="sidefoot">{state?.role === "dev" && !ceoView ? "Development view. Answer traces stay in the chat." : "Customer view. Locked areas open from live build progress."}</div>
+      <a className="brand" href={home}><span className="mark">EC</span><span><b>Ethikcorp BusinessOS</b><small>Built by Aqionlabs.ai</small></span></a>
+      <nav aria-label="Product">{(state?.tabs || [{ id: "pm", label: "BusinessBrain PM", enabled: true }, { id: "brain", label: "Ethikcorp BusinessBrain", enabled: false }, { id: "bots", label: "Ethikcorp Businessbots", enabled: false }]).map((item) => <a key={item.id} className={item.enabled ? (tab === item.id ? "nav on" : "nav") : "nav dim"} aria-current={tab === item.id ? "page" : undefined} href={`#${item.id}`} title={item.enabled ? undefined : customerPortal && !state?.ownershipReady ? "Opens after Step 1, Source ownership" : "This opens when the build reaches it"} onClick={() => setNavOpen(false)}><span className="nav-symbol"><StageIcon id={item.id === "pm" ? "chunk" : item.id === "brain" ? "index" : "embed"} /></span>{item.label}</a>)}</nav>
+      <div className="sidefoot">{team ? "Ethikcorp team workspace" : state?.handoff ? "Local development workspace" : state?.role === "dev" && !ceoView ? "Development view" : "Customer preview"}</div>
       </div>
     </aside>
     <div className="maincol">
@@ -166,22 +199,22 @@ export function BusinessApp() {
         <div className="ctx"><span>Ethikcorp BusinessOS</span><span aria-hidden="true">/</span><b>{pageName}</b></div>
         <div className="pills">
           <details className="env-pop">
-            <summary className="badge neutral">Prototype</summary>
-            <div className="pop"><p>{state?.residency.prototype || "This preview is not hosted in the UAE."}</p><p>{state?.llm?.provider === "workers-ai" ? state.llm.model : "No base model connected."}</p></div>
+            <summary className="badge neutral">{team ? "Team workspace" : state?.handoff ? "Local workspace" : "Prototype"}</summary>
+            <div className="pop"><p>{team ? "Access is set by your Ethikcorp account." : state?.handoff ? "Build state is stored on this machine." : state?.residency.prototype || "Prototype workspace"}</p><p>{state?.releaseModel?.mode === "azure" ? "Azure OpenAI configured for cited answers" : state?.llm?.provider === "workers-ai" ? state.llm.model : "Extractive retrieval"}</p></div>
           </details>
-          {state?.role === "dev" && <button type="button" className="btn ghost sm ceo-toggle" onClick={() => setCeoView((value) => !value)}>{ceoView ? "CEO view" : "Development view"}</button>}
-          <span className="user-menu">{state?.role === "dev" && !ceoView ? "Development" : "CEO"}</span>
+          {state?.role === "dev" && !team && <button type="button" className="btn ghost sm ceo-toggle" onClick={() => setCeoView((value) => !value)}>{ceoView ? "CEO view" : "Development view"}</button>}
+          <span className="user-menu">{assigned ? "Department head" : state?.role === "dev" && (team || !ceoView) ? "Development" : "CEO"}</span>
         </div>
       </header>
-      <div className="page live-pad">
+      <div className="page live-pad" ref={pageRef}>
         {!state && <DashboardSkeleton />}
         {error && <div className="banner-need" role="alert">{error}</div>}
         {!allowed && <Locked percent={state?.percent || 0} what={tab} departments={state?.departments || []} portalMode={state?.portalMode} step1={Boolean(state?.ownershipReady)} />}
         {allowed && tab === "pm" && state && <Project state={state} reload={reload} />}
-        {allowed && tab === "brain" && state && <Brain state={state} reload={reload} />}
-        {allowed && tab === "bots" && state && <Bots hash={hash} state={state} reload={reload} />}
+        {allowed && tab === "brain" && state && <Brain key={state.workspaceId} state={state} reload={reload} />}
+        {allowed && tab === "bots" && state && <Bots key={state.workspaceId} hash={route} state={state} reload={reload} canValidate={state.workspace?.role === "ceo" || (state.workspace?.mode === "local" && ceoView)} />}
       </div>
-      <ChatDock open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && !ceoView ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={raw.startsWith("bots/") ? raw.split("/")[1] : undefined} placeholder={tab === "pm" ? "Ask about build status…" : tab === "bots" ? "Ask the department bot…" : "Ask about revenue, pipeline or utilisation"} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />
+      {showChat && <ChatDock key={`${state?.workspaceId || ""}:${tab}:${departmentId || ""}:${state?.release?.active?.id || ""}:${state?.release?.active?.contentVersion || ""}:${businessChat ? state?.datasets?.map((table) => table.handoffId).join(",") : ""}`} release={Boolean(state?.release?.active || businessChat)} uploadedAnalytics={businessChat} open={chatOpen} onToggle={toggleChat} role={state?.role === "dev" && (team || !ceoView) ? "dev" : "customer"} area={tab === "bots" ? "bots" : "brain"} departmentId={departmentId} placeholder={businessChat ? "Ask about total revenue, weighted pipeline, or utilisation" : state?.release?.active ? "Ask about approved company sources" : tab === "pm" ? "Ask about build status…" : tab === "bots" ? "Ask the department bot…" : "Ask about revenue, pipeline or utilisation"} onResult={(result) => window.dispatchEvent(new CustomEvent("bos-insight", { detail: result }))} />}
     </div>
   </div>;
 }
@@ -215,6 +248,9 @@ function Locked({ percent, what, departments, portalMode, step1 }: { percent: nu
 
 function Project({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [notice, setNotice] = useState("");
+  const [selected, setSelected] = useState("ownership");
+  const active = BUILD_STAGES.find((stage) => stage.id === selected)!;
+  const current = describeStage(state, active.id);
   function speak() {
     const text = `BusinessBrain PM progress is ${state.percent} percent. ${state.documents.length} documents are indexed.`;
     if (!("speechSynthesis" in window)) { setNotice("This browser has no speech engine. The status is on screen."); return; }
@@ -227,54 +263,283 @@ function Project({ state, reload }: { state: Access; reload: () => Promise<void>
       <div className="hero-copy">
         <div className="eyebrow">BusinessBrain PM</div>
         <h1>Build the company brain</h1>
-        <p className="sub">Progress is {state.percent}%. {state.documents.length} documents, {state.chunks} passages.</p>
-        <div className="kpi-row builder-kpis"><article className="kpi-tile"><span className="kpi-label">Build progress</span><span className="kpi-value">{state.percent}%</span></article><article className="kpi-tile"><span className="kpi-label">Documents indexed</span><span className="kpi-value">{state.documents.length}</span></article><article className="kpi-tile"><span className="kpi-label">Passages</span><span className="kpi-value">{state.chunks}</span></article><article className="kpi-tile"><span className="kpi-label">Files checked</span><span className="kpi-value">{state.demo?.filesDone || 0}</span></article></div>
+        <p className="sub">Review source ownership, build the retrieval index, and prepare department bots.</p>
+        <div className="kpi-row builder-kpis"><article className="kpi-tile"><span className="kpi-label">Documents indexed</span><span className="kpi-value">{state.documents.length}</span></article><article className="kpi-tile"><span className="kpi-label">Passages</span><span className="kpi-value">{state.chunks}</span></article><article className="kpi-tile"><span className="kpi-label">Demo files checked</span><span className="kpi-value">{state.demo?.filesDone || 0}</span></article></div>
         <button type="button" className="btn" onClick={speak}>Speak status</button>
       </div>
       <div className="hero-ring">
         <Ring percent={state.percent} />
-        <p>This percentage counts finished pipeline stages. It is not a forecast.</p>
+        <p>{state.demo?.filesDone ? "Core pipeline · includes demo sources" : "Core retrieval pipeline"}</p>
       </div>
     </section>
     {notice && <p className="note" role="status">{notice}</p>}
-    <Outline state={state} />
-    {state.portalMode !== "customer" && <DemoSources state={state} reload={reload} />}
-    <Ownership state={state} reload={reload} />
-    {state.portalMode !== "customer" && <Handoff reload={reload} />}
-    <section className="card band-card lift"><div className="card-band">Where this prototype runs</div><div className="pad"><p>{state.residency.prototype}</p><p className="note">{state.residency.embedding} {state.residency.llm}</p><p className="note">{state.residency.production}</p><p className="note">About: built by Aqionlabs.ai.</p></div></section>
+    {state.release && <ReleasePanel release={state.release} model={state.releaseModel} shared={state.workspace?.mode === "team"} reload={reload} />}
+    <div className="build-workspace">
+      <Outline state={state} selected={selected} onSelect={setSelected} />
+      <section className="card stage-detail" aria-labelledby="selected-stage-title">
+        <header><div className="pipe-top"><StageIcon id={active.id} /><h2 id="selected-stage-title">{active.title}</h2></div>
+          <span className={`badge ${current.status === "done" ? "success" : "neutral"}`}>{stageLabel(current.status)}</span>
+          <p>{current.detail}</p>
+        </header>
+        {selected === "ownership" && <Ownership state={state} reload={reload} />}
+        {selected === "intake" && !state.handoff && state.portalMode !== "customer" && <Handoff reload={reload} />}
+        {selected === "refresh" && state.sourceInventory && <SourceLifecycle inventory={state.sourceInventory} reload={reload} openIntake={() => setSelected("intake")} />}
+        {state.handoff && <StageHandoff key={selected} stage={active} handoff={state.handoff} reload={reload} />}
+        {selected === "intake" && state.handoff && <BusinessFiles tables={state.datasets || []} reload={reload} />}
+        {selected === "refresh" && state.handoff && <ResetControl mode="uploads" workspaceId={state.workspaceId || ""} reload={reload} />}
+        {selected === "intake" && state.portalMode !== "customer" && state.businessMode !== "uploaded" && <DemoSources state={state} reload={reload} />}
+        {selected === "evaluation" && state.quality && <div className="pad"><DataQuality quality={state.quality} /></div>}
+      </section>
+    </div>
+    <section className="card band-card lift"><div className="card-band">Workspace runtime</div><div className="pad"><p>{state.workspace?.mode === "team" ? "Team workspace · data and release state are stored on the configured server." : state.handoff ? "Local development workspace · data and release state are stored on this machine." : state.residency.prototype}</p><p className="note">{state.handoff ? "Retrieval uses hashed vectors, keyword matching and source citations." : `${state.residency.embedding} ${state.residency.llm}`}</p></div></section>
     {state.role === "dev" && <DevTools state={state} reload={reload} />}
+    {state.handoff && <ResetControl mode="business" workspaceId={state.workspaceId || ""} reload={reload} />}
   </>;
 }
 
-function Outline({ state }: { state: Access }) {
-  const stages: [string, { status: string; detail: string }][] = [
-    ["retrieval", { status: state.indexLayer?.retrieval === "built" ? "done" : "not_started", detail: state.indexLayer?.retrieval === "built" ? "Heading-anchored passages are in the retrieval index." : "No passages are indexed yet." }],
-    ["semantic", { status: state.indexLayer?.semantic === "built" ? "done" : "not_started", detail: state.model?.targets?.length ? "Synonyms, service-line aliases, KPI definitions, and the sample kpi-targets file." : "Synonyms and KPI definitions are ready. Numeric targets appear after the sample kpi-targets file is indexed." }],
-    ["instruction", { status: state.instruction?.validated ? "done" : "not_started", detail: state.instruction?.validated ? `${state.instruction.pairs} pairs exported from the indexed tables and checked against the question list.` : "Instruction pairs are exported after the sample tables are indexed." }],
-    ...Object.entries(state.stages),
-    ["finetune", { status: "held", detail: state.finetune.detail }]
-  ];
-  return <section aria-label="Pipeline"><div className="ch"><h2>Pipeline</h2><b>{state.percent}%</b></div>
-    <div className="pipe">{stages.map(([id, stage]) => {
-      const label = id === "finetune" ? (state.instruction?.validated ? "LoRA not executed" : "Not exported") : id === "instruction" ? (state.instruction?.validated ? "Exported" : "Not exported") : stage.status === "done" ? "Done" : stage.status === "running" ? "Running" : "Not started";
-      return <article className={`pipe-card ${stageClass(id, stage.status)} lift`} key={id}>
-        <div className="pipe-top"><StageIcon id={id} /><b>{id === "finetune" ? "Fine-tune" : id}</b></div>
-        <small>{stage.detail}</small>
-        <span className="pipe-status">{label}</span>
-      </article>;
-    })}</div>
+function describeStage(state: Access, id: string) {
+  if (id === "refresh" && state.sourceInventory && (state.sourceInventory.sources.length || state.sourceInventory.withdrawals.length)) {
+    return { status: "available", detail: `${state.sourceInventory.sources.length} indexed sources · ${state.sourceInventory.withdrawals.length} recorded withdrawals.` };
+  }
+  if (id === "parse" && state.handoff) return { status: state.stages.parse.status, detail: "Extract text from Markdown, text files, text-based PDFs, and Word documents." };
+  if (id === "rag" && state.handoff && state.stages.rag.status === "done") return { status: "done", detail: `${state.chunks} indexed passages. ${state.releaseModel?.mode === "azure" ? "Cited answer model configured." : "Answers cite retrieved passages."}` };
+  if (id === "index" && state.handoff) return { status: state.stages.index.status, detail: `${state.chunks} passages in the local index.` };
+  if (state.stages[id]) return state.stages[id];
+  if (id === "semantic") return { status: state.indexLayer?.semantic === "built" ? "done" : "not_started", detail: "Service-line aliases, KPI definitions and sample targets." };
+  if (id === "instruction") return { status: state.instruction?.validated ? "done" : "not_started", detail: state.instruction?.validated ? `${state.instruction.pairs} validated sample pairs.` : "Prepare anonymised examples for style and response format." };
+  if (id === "finetune") return { status: "held", detail: state.finetune.detail };
+  if (id === "evaluation") return { status: state.release ? (state.release.evaluation?.passed ? "done" : "not_started") : (state.quality?.cross?.pass ? "done" : "not_started"), detail: "Check source citations and department visibility for the release candidate." };
+  const detail = {
+    privacy: "Record redactions, sensitive material and excluded sources.",
+    access: "Record which roles and departments may retrieve each source.",
+    refresh: "Review indexed sources, replace outdated files, or withdraw a source from BusinessBrain and department bots."
+  }[id];
+  const archived = state.handoff?.receipts.some((file) => file.stage === id && Object.values(file.destinations).every((target) => target.status === "uploaded"));
+  return { status: archived ? "archived" : "not_started", detail };
+}
+
+function ReleasePanel({ release, model, reload, shared }: { release: NonNullable<Access["release"]>; model?: Access["releaseModel"]; reload: () => Promise<void>; shared: boolean }) {
+  const [working, setWorking] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [error, setError] = useState("");
+  async function run(action: "evaluate" | "deploy") {
+    setWorking(action); setFeedback(""); setError("");
+    try {
+      const result: NonNullable<Access["release"]> = await api(`/api/brain/${action}`, {});
+      setFeedback(action === "deploy" ? "BusinessBrain and confirmed department bots are active in this workspace." : result.evaluation?.passed ? "Retrieval checks passed." : "Review the failed checks before deploying.");
+      await reload();
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setWorking(""); }
+  }
+  return <section className="card pad release-panel" aria-label="BusinessBrain release">
+    <div className="ch"><h2>BusinessBrain release</h2><span className={`badge ${release.active ? "success" : "neutral"}`}>{release.active ? (shared ? "Active for team" : "Active locally") : "Awaiting deployment"}</span></div>
+    <p>{release.candidates} approved {release.candidates === 1 ? "document" : "documents"} in the release candidate.</p>
+    {model && <p className="note">{model.mode === "azure" ? `Cited answer model · ${model.deployment}` : model.invalid ? "Extractive retrieval · check the configured Azure endpoint and deployment." : model.approved && model.missing.length ? `Extractive retrieval · missing ${model.missing.join(", ")}` : "Cited passages · extractive mode"}</p>}
+    {release.needsGolden && <p className="note">Upload validation questions as JSONL in the Evaluation stage before deploying to the team.</p>}
+    {release.active && <p className="note">{release.active.documents} released sources · {release.active.departments.length} active department bots · {updatedLabel(release.active.deployedAt)}{release.pendingChanges ? " · Pending source changes" : ""}</p>}
+    <div className="controls">
+      <button className="btn ghost" type="button" disabled={!release.candidates || Boolean(working)} onClick={() => run("evaluate")}>{working === "evaluate" ? "Checking…" : "Run retrieval checks"}</button>
+      <button className="btn" type="button" disabled={!release.canDeploy || Boolean(working)} onClick={() => run("deploy")}>{working === "deploy" ? "Deploying…" : "Deploy BusinessBrain"}</button>
+    </div>
+    {release.evaluation && <details><summary>{release.evaluation.checks.length} source checks</summary><ul>{release.evaluation.checks.map((check, index) => <li key={index}>{check.name} · {check.citation ? "Citation verified" : "Citation failed"} · {check.excluded ? "Visibility verified" : "Visibility failed"}</li>)}</ul></details>}
+    {Boolean(release.evaluation?.validationChecks?.length) && <details><summary>{release.evaluation?.validationChecks?.filter(({ passed }) => passed).length} of {release.evaluation?.validationChecks?.length} validation questions passed</summary>
+      <p className="note">Ranking profile {release.evaluation?.profile}</p>
+      <ul>{release.evaluation?.validationChecks?.map((check, index) => <li key={index}>Case {index + 1} · {check.passed ? "Passed" : "Failed"} · Expected {check.expectedDocument || "no matching passage"} · Returned {check.match || "no matching passage"}</li>)}</ul>
+    </details>}
+    {feedback && <p role="status">{feedback}</p>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
+}
+
+function stageLabel(status: string) {
+  return { done: "Complete", archived: "Evidence archived", available: "Sources available", running: "Running", held: "External runtime", blocked: "Blocked" }[status] || "Not started";
+}
+
+function Outline({ state, selected, onSelect }: { state: Access; selected: string; onSelect: (id: string) => void }) {
+  return <nav className="card stage-nav" aria-label="Build pipeline">
+    <h2>Build pipeline</h2>
+    {BUILD_STAGES.map(({ id, title }) => {
+      const stage = describeStage(state, id);
+      const count = state.handoff?.receipts.filter((file) => file.stage === id).length || 0;
+      return <button type="button" className={`stage-select ${stageClass(id, stage.status)}`} aria-pressed={selected === id} key={id} onClick={() => onSelect(id)}>
+        <span className="stage-mark"><StageIcon id={id} /></span>
+        <span><strong>{title}</strong><small>{stageLabel(stage.status)}{count > 0 ? ` · ${count} ${count === 1 ? "file" : "files"}` : ""}</small></span>
+        <span className="stage-chevron" aria-hidden="true">›</span>
+      </button>;
+    })}
+  </nav>;
+}
+
+function StageHandoff({ stage, handoff, reload }: { stage: (typeof BUILD_STAGES)[number]; handoff: NonNullable<Access["handoff"]>; reload: () => Promise<void> }) {
+  const [intakeType, setIntakeType] = useState("document");
+  const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checks, setChecks] = useState<Partial<Record<"github" | "drive", Destination>>>({});
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const targets = [["github", "GitHub"], ["drive", "Google Drive"]] as const;
+  const sources = SOURCES.filter(({ id }: { id: string }) => ["profile", "policies", "sops", "tasks", "marketing"].includes(id));
+  const receipts = handoff.receipts.filter((file) => file.stage === stage.id).slice().reverse();
+  const ready = targets.some(([id]) => handoff.connectors[id].ready);
+  const accept = stage.id === "ownership" ? ".xlsx" : stage.id === "intake" ? (intakeType === "document" ? ".md,.txt,.pdf,.docx" : ".csv") : ".md,.txt,.pdf,.docx,.xlsx,.csv,.json,.jsonl";
+  async function verify() {
+    setError(""); setChecking(true);
+    try { setChecks(await api("/api/brain/verify-destinations", {})); }
+    catch (reason) { setError((reason as Error).message); }
+    finally { setChecking(false); }
+  }
+  return <div className="pad stage-handoff">
+    <h3>Upload stage files</h3>
+    <p className="note">{stage.evidence}. Up to 5 MB per file.</p>
+    {stage.id === "evaluation" && <p className="note">A JSONL question suite uses question, expectedDocument (a file name or null), optional department ID, and split (calibration or validation).</p>}
+    <ul className="handoff-targets" aria-live="polite">
+      {targets.map(([id, label]) => <li key={id}>
+        <strong>{label}</strong><span className={`badge ${checks[id]?.status === "verified" ? "success" : checks[id]?.status === "failed" ? "low" : "neutral"}`}>{checks[id]?.status === "verified" ? "Access checked" : checks[id]?.status === "failed" ? "Check failed" : handoff.connectors[id].ready ? "Configured" : "Setup needed"}</span>
+        <small>{handoff.connectors[id].ready ? handoff.connectors[id].destination : handoff.connectors[id].missing.join(", ")}</small>
+        {checks[id]?.detail && handoff.connectors[id].ready && <small>{checks[id]?.detail}</small>}
+      </li>)}
+    </ul>
+    {ready && <p><button className="btn ghost sm" type="button" disabled={checking || busy} onClick={verify}>{checking ? "Checking access…" : "Verify destination access"}</button></p>}
+    <form className="stack" onSubmit={async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const data = new FormData(form);
+      const file = data.get("file");
+      if (!(file instanceof File) || !file.size || file.size > 5 * 1024 * 1024) { setError("Choose a file between 1 byte and 5 MB."); return; }
+      setError(""); setNotice(""); setBusy(true);
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let binary = "";
+        for (let offset = 0; offset < bytes.length; offset += 16384) binary += String.fromCharCode(...bytes.subarray(offset, offset + 16384));
+        const receipt: HandoffReceipt = await api("/api/brain/handoff", { stage: stage.id, fileName: file.name, base64: btoa(binary), approvalRef: data.get("approval"), approved: data.has("approved"), sourceId: data.get("source"), audience: data.get("audience"), tableKind: intakeType });
+        const delivered = targets.every(([id]) => receipt.destinations[id].status === "uploaded");
+        setNotice(delivered ? (intakeType !== "document" ? "Business table imported. The BusinessBrain dashboard now uses uploaded data." : receipt.indexed ? "Delivered to both destinations and indexed." : "Delivered to both destinations.") : "Handoff saved. Re-submit the same file to retry the pending destination.");
+        if (delivered) form.reset();
+        await reload();
+      } catch (reason) { setError((reason as Error).message); }
+      finally { setBusy(false); }
+    }}>
+      {stage.id === "intake" && <label>Upload type<select value={intakeType} onChange={(event) => setIntakeType(event.target.value)}><option value="document">Knowledge document</option>{Object.entries(BUSINESS_TABLES).map(([id, table]) => <option key={id} value={id}>{table.title} CSV</option>)}</select></label>}
+      {stage.id === "intake" && intakeType === "document" && <label>Source category<select name="source" required defaultValue=""><option value="" disabled>Select a source</option>{sources.map((source: { id: string; title: string }) => <option key={source.id} value={source.id}>{source.title}</option>)}</select></label>}
+      {stage.id === "intake" && intakeType === "document" && <label>Retrieval audience<select name="audience" required defaultValue=""><option value="" disabled>Select an audience</option><option value="company">All department bots</option>{catalog.map(({ id, name }) => <option key={id} value={id}>{name} only</option>)}</select></label>}
+      {stage.id === "intake" && intakeType !== "document" && <p className="note"><a href={`/api/brain/business-template?kind=${intakeType}`} download>Download CSV template</a> · Executive analytics</p>}
+      <label>File<input key={accept} name="file" type="file" accept={accept} required /></label>
+      <label>Owner approval reference<input name="approval" maxLength={200} required /></label>
+      <label className="approval-check"><input name="approved" type="checkbox" required />Approved for both destinations</label>
+      <button type="submit" className="btn" disabled={!ready || busy || checking}>{busy ? "Uploading…" : "Upload to GitHub and Drive"}</button>
+    </form>
+    {notice && <p role="status">{notice}</p>}
+    {error && <p role="alert">{error}</p>}
+    {receipts.length > 0 && <ul className="handoff-receipts" aria-label="File handoff receipts">{receipts.map((file) => <li key={file.id}>
+      <strong>{file.name}</strong>{file.indexed && <span className="badge success">Indexed</span>}
+      {file.withdrawnAt && <span className="badge neutral">{file.restoring ? "Restore pending" : "Withdrawn from index"}</span>}
+      {file.pages !== undefined && <small>Text extracted from {file.textPages} of {file.pages} PDF pages.</small>}
+      {targets.map(([id, label]) => {
+        const result = file.destinations[id];
+        return <small key={id}>{result.url ? <a href={result.url} target="_blank" rel="noreferrer">{label} receipt</a> : `${label} · ${result.detail || result.status}`}</small>;
+      })}
+    </li>)}</ul>}
+  </div>;
+}
+
+function SourceLifecycle({ inventory, reload, openIntake }: { inventory: SourceInventory; reload: () => Promise<void>; openIntake: () => void }) {
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [error, setError] = useState("");
+  const source = inventory.sources.find(({ id }) => id === selected);
+  return <section className="pad stage-handoff" aria-label="Manage indexed sources">
+    <div className="ch"><h3>Indexed sources</h3><button type="button" className="btn ghost sm" onClick={openIntake}>Open Collection &amp; handoff</button></div>
+    <p className="note">Upload a replacement with the same file name and source category, then evaluate and deploy. To restore a withdrawn source, use a fresh owner approval reference.</p>
+    {inventory.sources.length ? <ul className="handoff-receipts">{inventory.sources.map((item) => <li key={item.id}>
+      <strong>{item.name}</strong>
+      <span className={`badge ${item.serving ? "success" : "neutral"}`}>{item.current ? "In active release" : item.serving ? "Replacement staged" : item.eligible ? "Awaiting release" : "Excluded by ownership"}</span>
+      <small>{item.audience === "company" ? "All department bots" : catalog.find(({ id }) => id === item.audience)?.name || item.audience} · {item.revisions} indexed {item.revisions === 1 ? "version" : "versions"}</small>
+      <button type="button" className="btn ghost sm" aria-label={`Withdraw source ${item.name}`} disabled={busy} onClick={() => { setSelected(item.id); setError(""); setFeedback(""); }}>Withdraw source</button>
+    </li>)}</ul> : <p className="note">There are no private indexed sources yet.</p>}
+    {source && <form className="stack" onSubmit={async (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      setBusy(true); setError("");
+      try {
+        await api("/api/brain/sources/withdraw", { documentId: source.id, reason: data.get("reason") });
+        await reload();
+        setSelected("");
+        setFeedback(`${source.name} was withdrawn from BusinessBrain and the department bots.`);
+      } catch (reason) { setError((reason as Error).message); }
+      finally { setBusy(false); }
+    }}>
+      <h4>Withdraw {source.name}</h4>
+      <p className="note">This immediately removes every indexed version of this source. Archived copies remain in GitHub and Drive under their own permissions.</p>
+      <label>Withdrawal reason<textarea name="reason" rows={2} maxLength={500} required /></label>
+      <div className="controls">
+        <button type="submit" className="btn" disabled={busy}>{busy ? "Withdrawing…" : "Confirm withdrawal"}</button>
+        <button type="button" className="btn ghost" disabled={busy} onClick={() => setSelected("")}>Cancel</button>
+      </div>
+    </form>}
+    {feedback && <p role="status">{feedback}</p>}
+    {error && <p role="alert">{error}</p>}
+    {inventory.withdrawals.length > 0 && <details><summary>Withdrawal history ({inventory.withdrawals.length})</summary><ul className="handoff-receipts">{inventory.withdrawals.map((event, index) => <li key={`${event.at}:${index}`}>
+      <strong>{event.name}</strong><small>{updatedLabel(event.at)} · {event.actor} · {event.revisions} removed</small><small>{event.reason}</small>
+    </li>)}</ul></details>}
+  </section>;
+}
+
+function ResetControl({ mode, workspaceId, reload }: { mode: "uploads" | "business"; workspaceId: string; reload: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const title = mode === "business" ? "Business reset" : "Remove all uploaded data";
+  return <section className="card pad reset-control" aria-label={title}>
+    <h2>{title}</h2>
+    <p>{mode === "business" ? "Clear the BusinessBrain, analytics, and every department’s activations, tasks, drafts and automations." : "Clear indexed documents, imported tables, and the current release. Department work records are kept."} GitHub and Drive keep their archive copies.</p>
+    {open ? <form className="stack" onSubmit={async (event) => {
+      event.preventDefault();
+      setBusy(true); setNotice("");
+      try {
+        await api("/api/brain/reset", { mode, confirmation, workspaceId });
+        await reload();
+        setOpen(false); setConfirmation(""); setNotice("Reset complete. The portal is ready for fresh uploads.");
+      } catch (error) { setNotice((error as Error).message); }
+      finally { setBusy(false); }
+    }}>
+      <label>Type RESET to confirm<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" /></label>
+      <div className="controls"><button type="submit" className="btn reset-button" disabled={busy || confirmation !== "RESET"}>{busy ? "Resetting…" : `Confirm ${title.toLowerCase()}`}</button><button type="button" className="btn ghost" disabled={busy} onClick={() => { setOpen(false); setConfirmation(""); }}>Cancel</button></div>
+    </form> : <button type="button" className="btn reset-button" onClick={() => { setOpen(true); setNotice(""); }}>{title}</button>}
+    {notice && <p role="status">{notice}</p>}
+  </section>;
+}
+
+function BusinessFiles({ tables, reload }: { tables: NonNullable<Access["datasets"]>; reload: () => Promise<void> }) {
+  const [selected, setSelected] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  return <section className="pad stage-handoff" aria-label="Uploaded business tables">
+    <h3>Business tables</h3>
+    {tables.filter((table) => table.handoffId).length ? <ul className="handoff-receipts">{tables.filter((table) => table.handoffId).map((table) => <li key={table.id}>
+      <strong>{table.source}</strong><small>{table.rows} rows · {BUSINESS_TABLES[table.id as keyof typeof BUSINESS_TABLES]?.title}</small>
+      {selected === table.id ? <div className="controls"><button className="btn reset-button sm" type="button" disabled={busy} onClick={async () => {
+        setBusy(true); setError("");
+        try { await api("/api/brain/tables/remove", { kind: table.id, handoffId: table.handoffId }); setSelected(""); await reload(); }
+        catch (reason) { setError((reason as Error).message); }
+        finally { setBusy(false); }
+      }}>Confirm removal</button><button className="btn ghost sm" type="button" disabled={busy} onClick={() => setSelected("")}>Cancel</button></div> :
+        <button className="btn ghost sm" type="button" onClick={() => setSelected(table.id)}>Remove from dashboard</button>}
+    </li>)}</ul> : <p className="note">Upload an approved CSV to populate the BusinessBrain dashboard.</p>}
+    {error && <p role="alert">{error}</p>}
   </section>;
 }
 
 function DemoSources({ state, reload }: { state: Access; reload: () => Promise<void> }) {
-  const [github, setGithub] = useState(state.demo?.github || "https://github.com/Jaferdecodesai/ethikcorp-businessos-demo-data");
-  const [drive, setDrive] = useState(state.demo?.driveUrl || "https://drive.google.com/drive/folders/1sjU5DFEFRSwi1WcJFDz9tPRFwPHouut4");
   const [busy, setBusy] = useState("");
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   async function ingest() {
     setError("");
+    setRunning(true);
     try {
-      const plan = await api("/api/brain/demo/plan", { github, drive });
+      const plan = await api("/api/brain/demo/plan", {});
       setBusy(`0 of ${plan.files.length}`);
       for (let index = 0; index < plan.files.length; index += 1) {
         await api("/api/brain/demo/file", { path: plan.files[index].path });
@@ -284,16 +549,16 @@ function DemoSources({ state, reload }: { state: Access; reload: () => Promise<v
       await reload();
       setBusy("Indexed.");
     } catch (reason) { setError((reason as Error).message); }
+    finally { setRunning(false); }
   }
   const done = state.demo?.filesDone || 0;
   const total = state.demo?.filesTotal || 0;
   return <section className="card band-card lift"><div className="card-band sky">Connected sources</div><div className="pad stack">
     <p className="note">These two links are Ethikcorp’s demo sources. GitHub is public. Drive is fetched first and, if Google asks for a sign-in, the preview says so and continues from GitHub.</p>
-    <label>GitHub<input aria-label="GitHub demo repository" value={github} onChange={(event) => setGithub(event.target.value)} /></label>
-    <label>Google Drive<input aria-label="Google Drive demo folder" value={drive} onChange={(event) => setDrive(event.target.value)} /></label>
+    {state.demo && <div className="controls"><a href={state.demo.github} target="_blank" rel="noreferrer">Demo repository</a><a href={state.demo.driveUrl} target="_blank" rel="noreferrer">Demo Drive folder</a></div>}
     <p>{state.demo?.drive?.detail || "Drive has not been checked yet."}</p>
     {state.portalMode === "aqionteam" && <button className="btn ghost" type="button" onClick={async () => { try { await api("/api/brain/ownership-sample", {}); setBusy("Demo ownership sample imported."); await reload(); } catch (reason) { setError((reason as Error).message); } }}>Use the demo ownership sample</button>}
-    {state.portalMode !== "customer" && <button className="btn" type="button" onClick={ingest} disabled={Boolean(busy && busy !== "Indexed.")}>Ingest demo sources</button>}
+    {state.portalMode !== "customer" && <button className="btn" type="button" onClick={ingest} disabled={running}>{running ? "Ingesting demo sources…" : "Ingest demo sources"}</button>}
     {busy && <p role="status">{busy}</p>}
     {error && <p role="alert">{error}</p>}
     <p className="note">1. Sources linked. 2. Files indexed {done}{total ? ` of ${total}` : ""}.</p>
@@ -315,6 +580,7 @@ function DataQuality({ quality }: { quality: NonNullable<Access["quality"]> }) {
 function Ownership({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [message, setMessage] = useState("");
   return <section className="card band-card lift"><div className="card-band coral">1. Source ownership</div><div className="pad"><p className="note">{state.portalMode === "customer" ? "Step 1. Upload the completed .xlsx. All 18 sources must be present. BusinessBrain and Businessbots stay locked until this file is valid. A valid import starts the build." : "Upload the completed .xlsx. All 18 sources must be present. Row errors stay on screen and nothing is stored until the file is valid."}</p>
+    <p><a href="/api/brain/ownership-template" download>Download the ownership workbook template</a></p>
     <form className="stack" onSubmit={async (event) => {
       event.preventDefault();
       const file = new FormData(event.currentTarget).get("file");
@@ -353,14 +619,21 @@ function Handoff({ reload }: { reload: () => Promise<void> }) {
 
 function DevTools({ state, reload }: { state: Access; reload: () => Promise<void> }) {
   const [link, setLink] = useState("");
-  return <section className="card band-card lift"><div className="card-band sky">Development pipeline</div><div className="pad">
-    <p>Collection, cleaning, parsing, chunking, embedding, vectors, RAG, evaluation, and connectors are the stages above. Fine-tuning is listed and is not running.</p>
-    <p className="note">GitHub: {state.connectors.github.ok ? "token present" : `missing ${state.connectors.github.missing?.join(", ")}`}. Drive: {state.connectors.drive.ok ? "OAuth present" : `missing ${state.connectors.drive.missing?.join(", ")}`}. No files are fetched from either until those credentials exist.</p>
-    <button type="button" className="btn ghost" onClick={async () => { const result = await api("/api/brain/bootstrap-dev", {}); setLink(result.url || result.error || ""); }}>Issue the development invite</button>
+  const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState("");
+  return <section className="card band-card lift"><div className="card-band sky">Department activation</div><div className="pad">
+    <p>Confirm the departments that are ready to use the approved BusinessBrain release.</p>
+    {!state.handoff && <button type="button" className="btn ghost" onClick={async () => { try { const result = await api("/api/brain/bootstrap-dev", {}); setLink(result.url || ""); } catch (reason) { setError((reason as Error).message); } }}>Issue the development invite</button>}
     {link && <p className="note">Give this URL only to the development team. It is signed with the existing session secret.</p>}
     {link && <p><a href={link}>{link}</a></p>}
     <div className="ch"><h2>Confirm departments</h2></div>
-    {state.departments.map((department) => <div className="plainrow" key={department.id}><span className="navdot" style={{ background: faceFor(department.id).bg, width: 14, height: 14, boxShadow: "inset 0 0 0 1.5px #03050A" }} /><span><b>{department.name}</b><small>{department.workflows.join(", ")}</small></span><button type="button" className="btn sm" disabled={department.confirmed} onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>{department.confirmed ? "Confirmed" : "Confirm"}</button></div>)}
+    {error && <p role="alert">{error}</p>}
+    {state.departments.map((department) => <div className="plainrow" key={department.id}><span className="navdot" style={{ background: faceFor(department.id).bg, width: 14, height: 14, boxShadow: "inset 0 0 0 1.5px #03050A" }} /><span><b>{department.name}</b><small>{department.workflows.join(", ")}</small></span><button type="button" className="btn sm" disabled={department.confirmed || Boolean(confirming)} onClick={async () => {
+      setError(""); setConfirming(department.id);
+      try { await api("/api/brain/confirm", { id: department.id }); await reload(); }
+      catch (reason) { setError((reason as Error).message); }
+      finally { setConfirming(""); }
+    }}>{department.confirmed ? "Confirmed" : confirming === department.id ? "Confirming…" : "Confirm"}</button></div>)}
     </div></section>;
 }
 
@@ -374,7 +647,8 @@ type Insight = {
   fixes?: Access["opportunities"];
   steps?: { tool: string; detail: string }[];
   refused?: boolean;
-  citations?: { document: string; excerpt: string }[];
+  llm?: string;
+  citations?: { document: string; excerpt: string; heading?: string; url?: string }[];
 };
 
 const PROMPTS = ["Revenue by service line, last 6 months", "Department utilisation", "Where can we make AED 1M more?"];
@@ -424,25 +698,26 @@ function Brain({ state, reload }: { state: Access; reload: () => Promise<void> }
     };
   }, [period, mode, filter, undo]);
   const overview = state.model?.ready ? buildOverview(state.model, { period, mode, actions: fixes }) : null;
+  const uploaded = state.businessMode === "uploaded";
   return <div className="board">
     <header className="page-head">
       <h1>Business overview</h1>
-      <p className="sub">Recognised revenue, pipeline, utilisation and win rate from the indexed sample tables.</p>
+      <p className="sub">{uploaded ? "Revenue, pipeline and utilisation calculated from the uploaded business tables." : "Recognised revenue, pipeline, utilisation and win rate from the indexed sample tables."}</p>
       <div className="controls">
-        <label>Period<select aria-label="Period" value={overview?.period || period} onChange={(event) => { setPeriod(event.target.value); setFilter(null); }}>{(overview?.periods || [{ id: "last-6", label: "May–Oct 2026" }]).map((item: { id: string; label: string }) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        {Boolean(overview?.periods.length) && <label>Revenue period<select aria-label="Period" value={overview?.period || period} onChange={(event) => { setPeriod(event.target.value); setFilter(null); }}>{overview?.periods.map((item: { id: string; label: string }) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
         <span className="note">Currency AED</span>
         {state.model?.updated && <span className="note">{updatedLabel(state.model.updated)}</span>}
       </div>
-      {banner && <div className="info-banner" role="status"><span>Sample data — figures are illustrative until live sources are connected.</span><button type="button" onClick={() => { sessionStorage.setItem("bos-sample-banner", "off"); setBanner(false); }}>Dismiss</button></div>}
+      {!uploaded && banner && <div className="info-banner" role="status"><span>Sample data · illustrative figures.</span><button type="button" onClick={() => { sessionStorage.setItem("bos-sample-banner", "off"); setBanner(false); }}>Dismiss</button></div>}
+      {uploaded && Boolean(state.datasets?.length) && <div className="info-banner"><span>Source files · {state.datasets?.map((table) => `${table.source} (${table.rows} rows)`).join(" · ")}</span></div>}
       {filter && <div className="filter-pill">Filtered by chat: {filter} <button type="button" onClick={() => window.dispatchEvent(new Event("bos-undo"))}>Undo</button></div>}
     </header>
-    {!overview && <section className="card pad empty-card"><h2>No revenue recorded yet</h2><p>Ingest the demo sources to load the sample tables. Nothing is invented before those files are indexed.</p></section>}
+    {!overview && <section className="card pad empty-card"><h2>No business data yet</h2><p>{uploaded ? "Upload a business CSV in Collection & handoff to populate this dashboard." : "Import approved business CSVs in BusinessBrain PM or load the demo tables."}</p></section>}
     {overview && <div className="kpi-row">{(overview.kpis as KpiModel[]).map((kpi) => <KpiTile key={kpi.id} kpi={kpi} onSelect={() => { setMode(kpi.mode || "revenue"); setFilter(null); }} />)}</div>}
     {overview && <div className="chart-row">{(overview.charts as ChartSpec[]).map((chart) => <div className={`chart-card span-${chart.span || 6} ${highlight === chart.id ? "flash" : ""} ${pending ? "pending" : ""}`} key={chart.id}><LiveChart spec={chart} /></div>)}</div>}
-    {state.model?.clients?.length ? <DataTables model={state.model} /> : null}
+    {state.model && Boolean(state.model.clients?.length || state.model.openDeals?.length) && <DataTables key={state.model.updated} model={state.model} uploaded={uploaded} />}
     {overview && !overview.charts.length && <section className="card pad empty-card"><h2>No rows for this view</h2><button type="button" className="btn ghost" onClick={() => setPeriod("last-6")}>Change period</button></section>}
-    <div className="span-12 sec-h"><h2>Where to find AED 1M more</h2><span className="note">Revenue fixes from the indexed tables</span></div>
-    <OpportunityList items={fixes} reload={reload} />
+    {!uploaded && fixes.length > 0 && <><div className="span-12 sec-h"><h2>Where to find AED 1M more</h2><span className="note">Revenue fixes from the indexed tables</span></div><OpportunityList items={fixes} reload={reload} editable={state.workspace?.role !== "ceo"} /></>}
   </div>;
 }
 
@@ -473,7 +748,7 @@ function DashboardSkeleton() {
   return <div className="board" aria-hidden="true">{[0, 1, 2, 3].map((item) => <div className="skeleton tile" key={item}><span /><span /><span /></div>)}<div className="skeleton chart" /><div className="skeleton chart" /></div>;
 }
 
-function DataTables({ model }: { model: NonNullable<Access["model"]> }) {
+function DataTables({ model, uploaded }: { model: NonNullable<Access["model"]>; uploaded: boolean }) {
   const [clientPage, setClientPage] = useState(0);
   const [dealPage, setDealPage] = useState(0);
   const clients = model.clients || [];
@@ -482,22 +757,22 @@ function DataTables({ model }: { model: NonNullable<Access["model"]> }) {
   const clientSlice = clients.slice(clientPage * pageSize, clientPage * pageSize + pageSize);
   const dealSlice = deals.slice(dealPage * pageSize, dealPage * pageSize + pageSize);
   return <>
-      <section className="card chart-card data-table span-6">
-      <div className="card-h"><h3>Top clients</h3><span className="meta">Recognised revenue, TTM · AED</span><span className="badge neutral">Sample</span></div>
+      {clients.length > 0 && <section className="card chart-card data-table span-6">
+      <div className="card-h"><h3>Top clients</h3><span className="meta">Recognised revenue, TTM · AED</span>{!uploaded && <span className="badge neutral">Sample</span>}</div>
       <div className="tbl-wrap"><table className="tbl clients"><colgroup><col style={{ width: "54%" }} /><col style={{ width: "18%" }} /><col style={{ width: "28%" }} /></colgroup><thead><tr><th>Client</th><th>Status</th><th className="num">Revenue</th></tr></thead><tbody>{clientSlice.map((row) => <tr key={row.name}><td className="client-cell" title={`${row.name}, ${row.line}`}><b>{row.name}</b><small>{row.line}</small></td><td><span className={row.status === "Active" ? "badge success" : "badge neutral"}>{row.status}</span></td><td className="num">{formatFull(row.revenue, "AED").replace("AED\u00A0", "")}</td></tr>)}</tbody></table></div>
       <div className="pager"><span>{clientPage * pageSize + 1}–{Math.min(clients.length, (clientPage + 1) * pageSize)} of {clients.length}</span><button type="button" className="btn ghost sm" disabled={clientPage === 0} onClick={() => setClientPage((page) => page - 1)}>Previous</button><button type="button" className="btn ghost sm" disabled={(clientPage + 1) * pageSize >= clients.length} onClick={() => setClientPage((page) => page + 1)}>Next</button></div>
-    </section>
-      <section className="card chart-card data-table span-6">
-      <div className="card-h"><h3>Open pipeline</h3><span className="meta">Gross AED {formatFull(model.grossOpen || 0, "AED").replace("AED\u00A0", "")} · weighted {formatFull(model.weighted, "AED")}</span><span className="badge neutral">Sample</span></div>
+    </section>}
+      {deals.length > 0 && <section className="card chart-card data-table span-6">
+      <div className="card-h"><h3>Open pipeline</h3><span className="meta">Gross AED {formatFull(model.grossOpen || 0, "AED").replace("AED\u00A0", "")} · weighted {formatFull(model.weighted, "AED")}</span>{!uploaded && <span className="badge neutral">Sample</span>}</div>
       <div className="tbl-wrap"><table className="tbl deals"><colgroup><col style={{ width: "40%" }} /><col style={{ width: "18%" }} /><col style={{ width: "16%" }} /><col style={{ width: "10%" }} /><col style={{ width: "16%" }} /></colgroup><thead><tr><th>Client</th><th>Stage</th><th className="num">Value</th><th className="num">Prob.</th><th className="num">Weighted</th></tr></thead><tbody>{dealSlice.map((row) => <tr key={`${row.client}-${row.stage}`}><td className="clip2" title={row.client}><span>{row.client}</span></td><td>{row.stage}</td><td className="num">{row.value.toLocaleString("en-AE")}</td><td className="num">{row.prob}%</td><td className="num">{row.weighted.toLocaleString("en-AE")}</td></tr>)}</tbody></table></div>
       <div className="pager"><span>{dealPage * pageSize + 1}–{Math.min(deals.length, (dealPage + 1) * pageSize)} of {deals.length}</span><button type="button" className="btn ghost sm" disabled={dealPage === 0} onClick={() => setDealPage((page) => page - 1)}>Previous</button><button type="button" className="btn ghost sm" disabled={(dealPage + 1) * pageSize >= deals.length} onClick={() => setDealPage((page) => page + 1)}>Next</button></div>
-    </section>
+    </section>}
   </>;
 }
 
-function OpportunityList({ items, reload }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void> }) {
+function OpportunityList({ items, reload, editable }: { items: NonNullable<Access["opportunities"]>; reload: () => Promise<void>; editable: boolean }) {
   if (!items.length) return null;
-  return <>{items.slice(0, 4).map((item) => <article className="card fix span-3" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : formatFull(item.impactAed, "AED")}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details><button type="button" className="btn ghost sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button></article>)}</>;
+  return <>{items.slice(0, 4).map((item) => <article className="card fix span-3" key={item.id}><h3>{item.title}</h3><div className="impact">{item.impactAed == null ? "—" : formatFull(item.impactAed, "AED")}</div><p className="note">{item.confidence} · {item.owner}</p><details className="how"><summary>How we calculated</summary><p>{item.formula}</p></details>{editable && <button type="button" className="btn ghost sm" onClick={async () => { await api("/api/brain/task", item); await reload(); }}>Create task</button>}</article>)}</>;
 }
 
 function DeptFacts({ name, model }: { name: string; model?: Access["model"] }) {
@@ -507,43 +782,45 @@ function DeptFacts({ name, model }: { name: string; model?: Access["model"] }) {
   const bill = row.available ? Math.round((row.billable / row.available) * 1000) / 10 : 0;
   const utilTarget = model?.targets?.find((item) => item.metric === "utilisation_pct" && item.subject === name)?.value;
   const billTarget = model?.targets?.find((item) => item.metric === "billable_pct" && item.subject === name)?.value;
-  const gross = model?.grossOpen || 0;
-  const dealCount = model?.openDeals?.length || 0;
   const utilBelow = utilTarget != null && util < utilTarget;
   const billBelow = billTarget != null && bill < billTarget;
   return <div className="kpi-row">
-    <article className={`kpi-tile ${utilBelow ? "below" : ""}`}><span className="kpi-label">Utilisation</span><span className="kpi-value">{util.toFixed(1)}%</span><span className="kpi-target">{utilTarget == null ? "No target in the sample file" : `Target ${utilTarget}% · October 2026`}</span>{utilTarget == null ? <span className="badge neutral">No target</span> : utilBelow ? <span className="badge low">▼ Below target</span> : <span className="badge success">✓ On target</span>}</article>
-    <article className={`kpi-tile ${billBelow ? "below" : ""}`}><span className="kpi-label">Billable</span><span className="kpi-value">{bill.toFixed(1)}%</span><span className="kpi-target">{billTarget == null ? "No target in the sample file" : `Target ${billTarget}%`}</span>{billTarget == null ? <span className="badge neutral">No target</span> : billBelow ? <span className="badge low">▼ Below target</span> : <span className="badge success">✓ On target</span>}</article>
-    <article className="kpi-tile"><span className="kpi-label">Gross open pipeline</span><span className="kpi-value">{formatCompact(gross, "AED")}</span><span className="kpi-target">{dealCount} deals · AED {gross.toLocaleString("en-AE")} gross</span></article>
-    <article className="kpi-tile"><span className="kpi-label">Win rate</span><span className="kpi-value">{model?.winRate == null ? "—" : `${model.winRate.toFixed(1)}%`}</span><span className="kpi-target">Closed deals, all departments</span></article>
+    <article className={`kpi-tile ${utilBelow ? "below" : ""}`}><span className="kpi-label">Utilisation</span><span className="kpi-value">{util.toFixed(1)}%</span><span className="kpi-target">{utilTarget == null ? "No target supplied" : `Target ${utilTarget}%`}</span>{utilTarget == null ? <span className="badge neutral">No target</span> : utilBelow ? <span className="badge low">▼ Below target</span> : <span className="badge success">✓ On target</span>}</article>
+    <article className={`kpi-tile ${billBelow ? "below" : ""}`}><span className="kpi-label">Billable</span><span className="kpi-value">{bill.toFixed(1)}%</span><span className="kpi-target">{billTarget == null ? "No target supplied" : `Target ${billTarget}%`}</span>{billTarget == null ? <span className="badge neutral">No target</span> : billBelow ? <span className="badge low">▼ Below target</span> : <span className="badge success">✓ On target</span>}</article>
+    <article className="kpi-tile"><span className="kpi-label">Headcount</span><span className="kpi-value">{row.headcount ?? "—"}</span></article>
   </div>;
 }
 
-function Bots({ hash, state, reload }: { hash: string; state: Access; reload: () => Promise<void> }) {
-  const parts = hash.replace("#", "").split("/");
-  const selected = parts[1];
-  const process = parts[2] === "process";
+function Bots({ hash, state, reload, canValidate }: { hash: string; state: Access; reload: () => Promise<void>; canValidate: boolean }) {
+  const [, selected, view] = hash.replace("#", "").split("/");
+  const process = view === "process";
   const department = catalog.find((item) => item.id === selected);
-  const confirmedCount = state.departments.filter((item) => item.confirmed).length;
-  const built = Math.round((confirmedCount / 9) * 100);
-  if (!department) return <div className="board"><div className="span-12"><p className="note">{confirmedCount} of 9 departments confirmed. {built}% built. Pending departments stay marked as being built.</p></div><div className="dept-grid span-12">{catalog.map((item) => {
-    const weekly = (state.workflowMaps?.[item.id]?.flows || []).reduce((sum, flow) => sum + (flow.weeklyHours || 0), 0);
-    const confirmed = state.departments.find((row) => row.id === item.id)?.confirmed;
-    return <a className="dept-card" key={item.id} href={`#bots/${item.id}`}>
-      <div className="dept-face"><DeptIcon id={item.id} /><div><div className="dept-kicker">{item.code}</div>{weekly ? <div className="dept-metric">{weekly.toLocaleString("en-AE", { maximumFractionDigits: 1 })} h</div> : <div className="dept-metric">—</div>}<div className="dept-kicker">{weekly ? "Sample hours / week" : "Not measured"}</div></div></div>
-      <div className="dept-body"><h2>{item.name}</h2><p>{item.mandate}</p>{confirmed ? <span className="badge success">Confirmed</span> : <span className="badge neutral">Being built · {built}%</span>}</div>
-    </a>;
-  })}</div></div>;
+  const built = Math.round(state.departments.filter((item) => item.confirmed).length / 9 * 100);
+  const activeIds = new Set(state.release?.active?.departments || []);
+  if (!department) return <div className="board">
+    <header className="page-head"><h1>Businessbots</h1></header>
+    <div className="dept-grid span-12">{catalog.map((item) => {
+      const active = activeIds.has(item.id);
+      const confirmed = state.departments.some((entry) => entry.id === item.id && entry.confirmed);
+      return <a className={`dept-card dept-navigation-tile ${active ? "active" : confirmed ? "confirmed" : "pending"}`} key={item.id} href={`#bots/${item.id}`} aria-label={`Open workspace for ${item.name}`}>
+        <span className="stage-mark"><DeptIcon id={item.id} /></span>
+        <h2>{item.name}</h2>
+        <span className={`badge ${active ? "success" : confirmed ? "neutral" : "low"}`}>{active ? "Active" : confirmed ? "Ready to activate" : "Awaiting confirmation"}</span>
+        <span className="dept-tile-arrow" aria-hidden="true">→</span>
+      </a>;
+    })}</div>
+  </div>;
   return <>
     <header className="page-head">
-      <p className="note"><a href="#bots">Businessbots</a> / {department.name}</p>
+      {!state.workspace?.department && <p className="note"><a href="#bots">Businessbots</a> / {department.name}</p>}
       <h1>{department.name}</h1>
       <p className="sub">{department.mandate}</p>
-      <div className="controls"><label>Department<select aria-label="Department" value={department.id} onChange={(event) => { window.location.hash = `#bots/${event.target.value}`; }}>{catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a><span className={state.departments.find((item) => item.id === department.id)?.confirmed ? "badge success" : "badge neutral"}>{state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : `Being built · ${built}%`}</span></div>
+      {!state.workspace?.department && <div className="controls"><label>Department<select aria-label="Department" value={department.id} onChange={(event) => { window.location.hash = `#bots/${event.target.value}`; }}>{catalog.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{!state.workspace && <a className="btn ghost" href={`#bots/${department.id}/process`}>Process detail</a>}<span className={activeIds.has(department.id) ? "badge success" : "badge neutral"}>{activeIds.has(department.id) ? "Active" : state.departments.find((item) => item.id === department.id)?.confirmed ? "Confirmed" : "Awaiting confirmation"}</span></div>}
     </header>
     {state.portalMode === "customer" && !state.departments.find((item) => item.id === department.id)?.confirmed ? <Locked percent={built} what="bots" departments={state.departments} portalMode={state.portalMode} step1 /> : null}
-    <DeptFacts name={department.name} model={state.model} />
-    <BotDesk departmentId={department.id} process={process} state={state} reload={reload} />
+    {state.workspace && <DepartmentSupervision key={department.id} id={department.id} active={activeIds.has(department.id)} editable canValidate={canValidate} shared={state.workspace.mode === "team"} />}
+    {!state.workspace?.department && <DeptFacts name={department.name} model={state.model} />}
+    {!state.workspace && <BotDesk departmentId={department.id} process={process} state={state} reload={reload} />}
     {state.role === "dev" && <button type="button" className="btn" onClick={async () => { await api("/api/brain/confirm", { id: department.id }); await reload(); }}>Confirm this department</button>}
   </>;
 }
@@ -597,12 +874,12 @@ function isBottleneck(step: string, friction: string[]) {
   return words.some((word) => text.includes(word.slice(0, 7)));
 }
 
-type ChatLine = { who: string; text?: string; bullets?: { label: string; value: number; unit?: string }[]; steps?: { tool: string; detail: string }[]; chartId?: string; chartLabel?: string; error?: boolean; retry?: string };
+type ChatLine = { who: string; text?: string; bullets?: { label: string; value: number; unit?: string }[]; steps?: { tool: string; detail: string }[]; citations?: Insight["citations"]; llm?: string; chartId?: string; chartLabel?: string; error?: boolean; retry?: string };
 
-function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onResult }: { open: boolean; onToggle: () => void; role: "customer" | "dev"; area: string; departmentId?: string; placeholder?: string; onResult: (result: Insight) => void }) {
+function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onResult, release, uploadedAnalytics }: { open: boolean; onToggle: () => void; role: "customer" | "dev"; area: string; departmentId?: string; placeholder?: string; onResult: (result: Insight) => void; release: boolean; uploadedAnalytics?: boolean }) {
   const [text, setText] = useState("");
   const [asking, setAsking] = useState(false);
-  const [lines, setLines] = useState<ChatLine[]>([{ who: "BusinessBrain", text: "Ask a question about your business. Charts update with the answer." }]);
+  const [lines, setLines] = useState<ChatLine[]>([{ who: "BusinessBrain", text: release ? "Ask a question about the approved sources in this release." : "Ask a question about your business. Charts update with the answer." }]);
   async function ask(event?: React.FormEvent, preset?: string) {
     event?.preventDefault();
     const question = (preset || text).trim();
@@ -614,11 +891,11 @@ function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onRes
     setLines((prev) => [...prev, { who: "You", text: question }, { who: "BusinessBrain", text: "Analysing…" }]);
     const steps: { tool: string; detail: string }[] = [];
     try {
-      const response = await fetch("/api/brain/ask", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/x-ndjson" }, body: JSON.stringify({ question, area, departmentId }) });
+      const response = await fetch(release ? "/api/brain/ask-release" : "/api/brain/ask", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "application/x-ndjson" }, body: JSON.stringify({ question, area, departmentId }) });
       if (!response.ok || !response.body || !response.headers.get("content-type")?.includes("ndjson")) {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Request failed");
-        finish(result, steps, question);
+        finish(result, result.steps || steps, question);
         return;
       }
       const reader = response.body.getReader();
@@ -637,8 +914,8 @@ function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onRes
           if (event.type === "done") finish(event, steps, question);
         }
       }
-    } catch {
-      setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: "Couldn't get an answer. Your dashboard hasn't changed.", error: true, retry: question }));
+    } catch (error) {
+      setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: (error as Error).message || "Couldn't get an answer.", error: true, retry: question }));
     } finally {
       setAsking(false);
       window.dispatchEvent(new CustomEvent("bos-pending", { detail: false }));
@@ -649,9 +926,9 @@ function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onRes
       setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: "Couldn't get an answer. Your dashboard hasn't changed.", error: true, retry: question }));
       return;
     }
-    if (!result.refused) onResult({ ...result, steps });
+    if (!release && !result.refused) onResult({ ...result, steps });
     const chartLabel = result.view ? filterLabel(result.view) : "";
-    setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: result.bullets?.length ? undefined : result.answer, bullets: result.bullets, steps: role === "dev" ? steps : undefined, chartId: result.refused ? undefined : chartIdFor(result.view || "revenue"), chartLabel: result.refused ? undefined : chartLabel }));
+    setLines((prev) => prev.filter((line) => line.text !== "Analysing…").concat({ who: "BusinessBrain", text: result.bullets?.length ? undefined : result.answer, bullets: result.bullets, citations: result.citations, llm: result.llm, steps: role === "dev" ? steps : undefined, chartId: release || result.refused ? undefined : chartIdFor(result.view || "revenue"), chartLabel: result.refused ? undefined : chartLabel }));
   }
   return <aside className="chat-dock" aria-label="BusinessBrain chat">
     {open && <div className="chat-log">{lines.map((line, index) => <article className={line.who === "You" ? "bubble you" : "bubble"} key={index}>
@@ -659,6 +936,8 @@ function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onRes
       <div>
         {line.text === "Analysing…" ? <div className="skeleton lines" aria-live="polite"><span /><span /><span /><small>Analysing…</small></div> : null}
         {line.bullets?.length ? <ul className="figure-list">{line.bullets.slice(0, 5).map((item) => <li key={item.label}><span>{item.label}</span><b>{formatFull(Number(item.value), item.unit)}</b></li>)}</ul> : line.text && line.text !== "Analysing…" ? <p>{line.text}</p> : null}
+        {line.citations?.length ? <ol className="chat-sources" aria-label="Sources">{line.citations.map((item, position) => <li key={position}>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.document}</a> : item.document}{item.heading ? ` · ${item.heading}` : ""}</li>)}</ol> : null}
+        {release && line.citations?.length ? <small className="note">{line.llm === "azure-release" ? "Model-assisted answer" : line.llm === "calculated" ? "Calculated from uploaded data" : "Cited passage"}</small> : null}
         {line.chartId && <button type="button" className="chip" onClick={() => document.getElementById(line.chartId || "")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Updated: {line.chartLabel}</button>}
         {line.chartId && <button type="button" className="linkish" onClick={() => window.dispatchEvent(new Event("bos-undo"))}>Undo</button>}
         {line.error && line.retry && <button type="button" className="btn ghost sm" onClick={() => ask(undefined, line.retry)}>Try again</button>}
@@ -667,7 +946,7 @@ function ChatDock({ open, onToggle, role, area, departmentId, placeholder, onRes
     </article>)}</div>}
     <div className="chat-bar">
       {!open && <span className="dock-mark" aria-hidden="true">EC</span>}
-      <div className="prompts">{PROMPTS.map((prompt) => <button type="button" className="chip" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div>
+      {(!release || uploadedAnalytics) && <div className="prompts">{(uploadedAnalytics ? ["Total revenue", "Weighted pipeline", "Utilisation"] : PROMPTS).map((prompt) => <button type="button" className="chip" key={prompt} onClick={() => ask(undefined, prompt)}>{prompt}</button>)}</div>}
       <form className="ask" onSubmit={ask}>
         <textarea aria-label="Question" rows={1} value={text} placeholder={placeholder || "Ask about revenue, pipeline or utilisation"} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void ask(); } }} />
         <button className="btn" type="submit" disabled={asking}>Ask</button>

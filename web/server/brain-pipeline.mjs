@@ -6,7 +6,10 @@ export const DEV_STAGES = ["collection", "cleaning", "parsing", "chunking", "emb
 const DIMS = 48;
 
 export function tokenize(text) {
-  return String(text || "").toLowerCase().match(/[a-z0-9]{2,}/g) || [];
+  return String(text || "").normalize("NFKC").toLowerCase()
+    .replace(/\p{M}|\u0640/gu, "")
+    .replace(/[أإآٱ]/gu, "ا")
+    .match(/[\p{L}\p{N}]{2,}/gu) || [];
 }
 
 export function embed(text) {
@@ -39,17 +42,31 @@ export function parseDocument(name, text) {
   return { ok: true, text: cleaned };
 }
 
-export function chunkMarkdown(name, text) {
+export function chunkMarkdown(name, text, bounded = false) {
   const parts = String(text || "").split(/^(?=#{1,6} )/m).map((part) => part.trim()).filter(Boolean);
-  return (parts.length ? parts : [String(text || "")]).flatMap((part) => {
+  const passages = (parts.length ? parts : [String(text || "")]).flatMap((part) => {
     const heading = (part.match(/^#{1,6} +(.+)$/m) || [, "Document"])[1].trim();
     const anchor = heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    return chunkText(part).map((body) => ({ text: body, heading, anchor, source: name }));
-  }).slice(0, 80);
+    return chunkText(part, bounded).map((body) => ({ text: body, heading, anchor, source: name }));
+  });
+  return bounded ? passages : passages.slice(0, 80);
 }
 
-export function chunkText(text) {
-  const blocks = text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+export function chunkText(text, bounded = false) {
+  const paragraphs = text.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+  const blocks = bounded ? paragraphs.flatMap((block) => {
+    const pieces = [];
+    let start = 0;
+    while (block.length - start > 700) {
+      const prefix = block.slice(start, start + 701);
+      const space = Math.max(prefix.lastIndexOf(" "), prefix.lastIndexOf("\n"));
+      const end = start + (space >= 350 ? space : 700);
+      pieces.push(block.slice(start, end).trim());
+      start = end;
+    }
+    pieces.push(block.slice(start).trim());
+    return pieces.filter(Boolean);
+  }) : paragraphs;
   const chunks = [];
   let current = "";
   for (const block of blocks.length ? blocks : [text]) {
@@ -59,12 +76,12 @@ export function chunkText(text) {
     } else current = current ? `${current}\n\n${block}` : block;
   }
   if (current) chunks.push(current);
-  return chunks.slice(0, 40);
+  return bounded ? chunks : chunks.slice(0, 40);
 }
 
 export function rankChunks(question, chunks) {
   const query = embed(question);
-  return chunks.map((chunk) => ({ ...chunk, score: cosine(query, chunk.embedding) })).sort((a, b) => b.score - a.score);
+  return chunks.map((chunk) => ({ ...chunk, score: cosine(query, chunk.embeddingVersion === 2 ? chunk.embedding : embed(chunk.text)) })).sort((a, b) => b.score - a.score);
 }
 
 export function answerFromChunks(question, chunks) {
@@ -85,14 +102,23 @@ export function emptyBrain() {
   return { documents: [], chunks: [], ownershipReady: false, confirmed: {}, roles: {} };
 }
 
-export function ingestDocument(brain, input) {
-  const parsed = parseDocument(input.name, input.text);
-  if (!parsed.ok) return { ok: false, error: parsed.error, brain };
+export function prepareDocument(input) {
+  const parsed = parseDocument(input.extractedFormat ? "extracted.txt" : input.name, input.text);
+  if (!parsed.ok) return parsed;
+  const bounded = Boolean(input.extractedFormat);
+  const markdown = input.extractedFormat === "markdown" || String(input.name || "").endsWith(".md");
+  const rich = markdown ? chunkMarkdown(input.name, parsed.text, bounded) : chunkText(parsed.text, bounded).map((body) => ({ text: body, heading: "", anchor: "", source: input.name }));
+  if (bounded && rich.length > 160) return { ok: false, error: "The document produced more than 160 passages. Split it before uploading." };
+  return { ...parsed, rich };
+}
+
+export function ingestDocument(brain, input, prepared = prepareDocument(input)) {
+  if (!prepared.ok) return { ok: false, error: prepared.error, brain };
   const id = `doc-${brain.documents.length + 1}-${Date.now()}`;
-  const rich = String(input.name || "").endsWith(".md") ? chunkMarkdown(input.name, parsed.text) : chunkText(parsed.text).map((body) => ({ text: body, heading: "", anchor: "", source: input.name }));
-  const pieces = rich.map((piece, index) => ({ id: `${id}-${index}`, documentId: id, document: input.name, heading: piece.heading, anchor: piece.anchor, source: piece.source, text: piece.text, embedding: embed(piece.text) }));
-  const next = { ...brain, documents: [...brain.documents, { id, name: input.name, sourceId: input.sourceId || "", text: parsed.text }], chunks: [...brain.chunks, ...pieces] };
-  const check = answerFromChunks(tokenize(parsed.text).slice(0, 6).join(" "), next.chunks);
+  const provenance = input.handoffId ? { handoffId: input.handoffId, audience: input.audience, sourceUrl: input.sourceUrl } : {};
+  const pieces = prepared.rich.map((piece, index) => ({ id: `${id}-${index}`, documentId: id, document: input.name, heading: piece.heading, anchor: piece.anchor, source: piece.source, text: piece.text, embedding: embed(piece.text), embeddingVersion: 2, ...provenance }));
+  const next = { ...brain, documents: [...brain.documents, { id, name: input.name, sourceId: input.sourceId || "", text: prepared.text, ...provenance }], chunks: [...brain.chunks, ...pieces] };
+  const check = answerFromChunks(tokenize(prepared.text).slice(0, 6).join(" "), next.chunks);
   return { ok: true, brain: next, citationReady: check.citations.length > 0 };
 }
 

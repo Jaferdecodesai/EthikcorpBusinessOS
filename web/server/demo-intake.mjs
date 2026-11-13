@@ -137,7 +137,7 @@ function validateInstruction(datasets) {
 }
 
 function replaceDocument(brain, input) {
-  const documents = (brain.documents || []).filter((document) => document.name !== input.name);
-  const chunks = (brain.chunks || []).filter((chunk) => chunk.document !== input.name);
+  const documents = (brain.documents || []).filter((document) => document.handoffId || document.name !== input.name);
+  const chunks = (brain.chunks || []).filter((chunk) => chunk.handoffId || chunk.document !== input.name);
   return ingestDocument({ ...brain, documents, chunks }, input);
 }

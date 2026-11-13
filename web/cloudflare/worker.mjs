@@ -5,6 +5,7 @@ import { runtimeConfig } from "../server/runtimes.mjs";
 import { createSession, readSession, checkApiRequest } from "./session.mjs";
 import { handleBrain } from "../server/brain-api.mjs";
 import { readInvite, signInvite } from "../server/invites.mjs";
+import { ownershipTemplate, workbookFor } from "../phase1/customer-logic.mjs";
 
 const json = (value, status=200, extra={}) => new Response(JSON.stringify(value),{status,headers:{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store",...extra}});
 const headers = {
@@ -38,6 +39,10 @@ export default {
         return secured(json({ready:true,mode:"cloud-preview",expires:session.expires},200,fresh?{"Set-Cookie":session.cookie}:{}));
       }
       if(!session)return secured(json({error:"Open the app to establish your preview workspace, then retry."},401));
+      if(url.pathname==="/api/brain/ownership-template"&&request.method==="GET"){
+        const bytes=await workbookFor(ownershipTemplate());
+        return secured(new Response(bytes,{headers:{"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","Content-Disposition":'attachment; filename="ethikcorp-source-ownership.xlsx"'}}));
+      }
       if(url.pathname.startsWith("/api/brain")){
         const stub=env.PREVIEW_WORKSPACES.get(env.PREVIEW_WORKSPACES.idFromName("ethikcorp-businessllm-v1"));
         if(url.pathname==="/api/brain/claim"){

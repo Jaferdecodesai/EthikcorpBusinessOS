@@ -174,7 +174,7 @@ function periodLabel(list) {
   return `${monthName(list[0])}–${monthName(list[list.length - 1])}`;
 }
 
-export function projectModel(datasets) {
+export function projectModel(datasets, uploaded = false) {
   const revenueRows = datasets?.revenue?.rows || [];
   const hourRows = datasets?.hours?.rows || [];
   const pipelineRows = datasets?.pipeline?.rows || [];
@@ -188,10 +188,14 @@ export function projectModel(datasets) {
   for (const row of pipelineRows) stages.set(row.stage, (stages.get(row.stage) || 0) + (Number(row.value_aed) || 0));
   for (const row of open.filter((item) => Number(item.win_probability_pct) < 40)) risk.set(row.stage, (risk.get(row.stage) || 0) + (Number(row.value_aed) || 0));
   const closedValue = won.reduce((sum, row) => sum + Number(row.value_aed), 0) + lost.reduce((sum, row) => sum + Number(row.value_aed), 0);
+  const hoursMonth = uploaded ? hourRows.map((row) => row.month).sort().at(-1) : null;
   return {
-    ready: revenueRows.length > 0,
+    ready: revenueRows.length > 0 || (uploaded && Boolean(hourRows.length || pipelineRows.length || datasets?.clients?.rows.length)),
+    uploaded,
+    hoursMonth,
+    hasPipeline: Boolean(datasets?.pipeline),
     revenue: revenueRows.map((row) => ({ month: row.month, label: row.month_label || monthName(row.month), line: row.service_line, value: Number(row.revenue_aed) || 0 })),
-    hours: hourRows.map((row) => ({ department: row.department, headcount: Number(row.headcount) || 0, hours: Number(row.hours_utilized_oct_2026) || 0, available: Number(row.hours_available_oct_2026) || 0, billable: Number(row.billable_hours_oct_2026) || 0 })),
+    hours: hourRows.filter((row) => !uploaded || row.month === hoursMonth).map((row) => ({ department: row.department, headcount: Number(row.headcount) || 0, hours: Number(row.hours_utilised ?? row.hours_utilized_oct_2026) || 0, available: Number(row.hours_available ?? row.hours_available_oct_2026) || 0, billable: Number(row.billable_hours ?? row.billable_hours_oct_2026) || 0 })),
     clients: (datasets?.clients?.rows || []).map((row) => ({ name: row.client_name, line: row.service_line, status: row.status, revenue: Number(row.revenue_recognized_ttm_aed) || 0 })).sort((left, right) => right.revenue - left.revenue),
     openDeals: open.map((row) => ({ client: row.client_name, stage: row.stage, value: Number(row.value_aed) || 0, prob: Number(row.win_probability_pct) || 0, weighted: Math.round(Number(row.value_aed) * Number(row.win_probability_pct) / 100), department: row.department, owner: row.owner_role })).sort((left, right) => right.weighted - left.weighted),
     grossOpen: Math.round(open.reduce((sum, row) => sum + (Number(row.value_aed) || 0), 0)),
@@ -199,9 +203,13 @@ export function projectModel(datasets) {
     risk: [...risk.entries()].map(([name, value]) => ({ name, value: Math.round(value) })),
     winRate: won.length + lost.length ? Math.round((won.length / (won.length + lost.length)) * 1000) / 10 : null,
     winRateValue: closedValue ? Math.round((won.reduce((sum, row) => sum + Number(row.value_aed), 0) / closedValue) * 1000) / 10 : null,
-    weighted: Math.round(open.reduce((sum, row) => sum + Number(row.value_aed) * Number(row.win_probability_pct) / 100, 0)),
+    weighted: roundForModel(open.reduce((sum, row) => sum + Number(row.value_aed) * Number(row.win_probability_pct) / 100, 0), uploaded),
     targets: targetRows.map((row) => ({ metric: row.metric, subject: row.subject, value: Number(row.target_value), unit: row.unit, goodDirection: row.good_direction || "up" }))
   };
+}
+
+function roundForModel(value, uploaded) {
+  return uploaded ? Math.round(value * 100) / 100 : Math.round(value);
 }
 
 function findTarget(model, metric, subject) {
@@ -212,30 +220,35 @@ function findTarget(model, metric, subject) {
 export function buildOverview(model, options = {}) {
   if (!model?.ready) return { ready: false, kpis: [], charts: [], periods: [], currency: "AED" };
   const months = [...new Set(model.revenue.map((row) => row.month))].filter(Boolean).sort();
-  const periods = [
-    { id: "last-6", months: months.slice(-6) },
-    { id: "ttm", months },
-    { id: "2026-10", months: months.filter((month) => month === "2026-10") },
-    { id: "2026-q3", months: months.filter((month) => month >= "2026-07" && month <= "2026-09") }
-  ].filter((item) => item.months.length).map((item) => ({ ...item, label: periodLabel(item.months) }));
-  const period = periods.find((item) => item.id === options.period) || periods[0];
+  const periods = (model.uploaded ? [
+    ...(months.length > 6 ? [{ id: "last-6", months: months.slice(-6) }] : []),
+    ...(months.length > 1 ? [{ id: "ttm", months }] : []),
+    ...months.slice().reverse().map((month) => ({ id: month, months: [month] }))
+  ] : [
+      { id: "last-6", months: months.slice(-6) },
+      { id: "ttm", months },
+      { id: "2026-10", months: months.filter((month) => month === "2026-10") },
+      { id: "2026-q3", months: months.filter((month) => month >= "2026-07" && month <= "2026-09") }
+  ]).filter((item) => item.months.length).map((item) => ({ ...item, label: periodLabel(item.months) }));
+  const period = periods.find((item) => item.id === options.period) || periods[0] || { id: "all", months: [], label: "No revenue period" };
   const rows = model.revenue.filter((row) => period.months.includes(row.month));
   const mode = options.mode || "revenue";
-  return { ready: true, period: period.id, periodLabel: period.label, periods: periods.map(({ id, label }) => ({ id, label })), mode, currency: "AED", sample: true, kpis: overviewKpis(model, rows, period), charts: overviewCharts(model, rows, period, mode, options.actions || []) };
+  const charts = overviewCharts(model, rows, period, mode, options.actions || []);
+  return { ready: true, period: period.id, periodLabel: period.label, periods: periods.map(({ id, label }) => ({ id, label })), mode, currency: "AED", sample: !model.uploaded, kpis: overviewKpis(model, rows, period), charts: model.uploaded ? charts.filter((chart) => chart.series.length).map((chart) => ({ ...chart, sample: false })) : charts };
 }
 
 function overviewKpis(model, rows, period) {
-  const total = Math.round(rows.reduce((sum, row) => sum + row.value, 0));
+  const total = roundForModel(rows.reduce((sum, row) => sum + row.value, 0), model.uploaded);
   const byMonth = period.months.map((month) => Math.round(rows.filter((row) => row.month === month).reduce((sum, row) => sum + row.value, 0)));
-  const change = byMonth[0] ? Math.round(((byMonth[byMonth.length - 1] - byMonth[0]) / byMonth[0]) * 1000) / 10 : null;
+  const change = byMonth.length > 1 && byMonth[0] ? Math.round(((byMonth[byMonth.length - 1] - byMonth[0]) / byMonth[0]) * 1000) / 10 : null;
   const revenueTarget = period.id === "last-6" ? findTarget(model, "revenue", "Company") : (findTarget(model, "monthly_revenue", "Company") || 0) * (period.months.length || 1) || null;
   const available = model.hours.reduce((sum, row) => sum + row.available, 0);
   const utilised = model.hours.reduce((sum, row) => sum + row.hours, 0);
   const utilisation = available ? Math.round((utilised / available) * 1000) / 10 : null;
   return [
-    kpiTile("revenue", "Revenue", total, "AED", change, monthName(period.months[0]), revenueTarget, "revenue", "Recognised revenue in the selected period."),
-    kpiTile("utilisation", "Utilisation", utilisation, "%", null, "October 2026", findTarget(model, "utilisation_pct", "Company"), "utilisation", "Utilised hours divided by available hours for October 2026."),
-    kpiTile("pipeline", "Weighted pipeline", model.weighted, "AED", null, "", findTarget(model, "weighted_pipeline", "Company"), "pipeline", "Open pipeline value times the win probability already in the file."),
+    kpiTile("revenue", "Revenue", rows.length ? total : null, "AED", change, period.months[0] ? monthName(period.months[0]) : "", revenueTarget, "revenue", "Recognised revenue in the selected period."),
+    kpiTile("utilisation", "Utilisation", utilisation, "%", null, model.uploaded ? model.hoursMonth : "October 2026", findTarget(model, "utilisation_pct", "Company"), "utilisation", "Utilised hours divided by available hours in the latest hours snapshot."),
+    kpiTile("pipeline", "Weighted pipeline", model.uploaded && !model.hasPipeline ? null : model.weighted, "AED", null, "", findTarget(model, "weighted_pipeline", "Company"), "pipeline", "Open pipeline value times the win probability already in the file."),
     kpiTile("win-rate", "Win rate", model.winRate, "%", null, "", findTarget(model, "win_rate_count", "Company"), "pipeline", "Closed won deals divided by closed won and closed lost deals.")
   ];
 }
@@ -270,13 +283,14 @@ function overviewCharts(model, rows, period, mode, actions) {
   if (mode === "pipeline") return [chartSpec("chart-pipeline", "bar", "Pipeline by stage", "AED", capCategories(model.stages.map((row) => ({ name: row.name, value: row.value, belowTarget: false })).sort((left, right) => right.value - left.value), 10), 12)];
   if (mode === "risk") return [chartSpec("chart-risk", "bar", "Open pipeline below 40% probability", "AED", model.risk.map((row) => ({ name: row.name, value: row.value, belowTarget: false })), 12)];
   if (mode === "actions") return [chartSpec("chart-actions", "bar", "Revenue actions", "AED", actions.slice(0, 5).map((item) => ({ name: item.title, value: item.impactAed || 0, belowTarget: false })), 12)];
-  const utilisation = chartSpec("chart-utilisation", "bar", "Utilisation by department, October 2026", "%", model.hours.map((row) => {
+  const utilisation = chartSpec("chart-utilisation", "bar", model.uploaded ? `Utilisation by department · ${model.hoursMonth || "Latest period"}` : "Utilisation by department, October 2026", "%", model.hours.map((row) => {
     const value = row.available ? Math.round((row.hours / row.available) * 1000) / 10 : 0;
     const target = findTarget(model, "utilisation_pct", row.department);
     return { name: row.department, value, target, belowTarget: target != null && value < target, statusLabel: "▼ Below target" };
   }).sort((left, right) => right.value - left.value), 6, "green");
   if (mode === "donut") return [mix, columns];
   if (mode === "utilisation") return [utilisation, lines, mix];
+  if (model.uploaded && !rows.length && model.stages.length) return [chartSpec("chart-pipeline", "bar", "Pipeline by stage", "AED", model.stages, 6), utilisation];
   return [lines, mix, { ...columns, span: 6 }, utilisation];
 }
 

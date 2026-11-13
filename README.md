@@ -4,6 +4,8 @@ Built by Aqionlabs.ai. This repository is the Ethikcorp company portal: Business
 
 ## Run
 
+Use Node.js 22.13 or newer.
+
 ```bash
 cd web
 npm ci
@@ -11,6 +13,63 @@ npm run dev
 ```
 
 Open http://127.0.0.1:5052/#pm. The customer portal preview is `PORTAL_MODE=customer npm run dev`. The Aqion team preview is `PORTAL_MODE=aqionteam npm run dev`.
+
+## Build and activate the BusinessBrain locally
+
+```sh
+cd web
+npm ci
+PORTAL_MODE=aqionteam BRAIN_LOCAL_DEVELOPMENT=true npm run dev
+```
+
+The workspace listens on loopback and saves its build state in `web/.data/brain.json`. Set `BRAIN_DATA_FILE` to use a separate file. The local workspace uses the developer role for the operator on that machine. The hosted preview uses its existing session modes and demo pipeline.
+
+1. Open BusinessBrain PM and download the 18-source ownership workbook from Discovery & ownership. Complete and import it. The team demo includes a sample workbook and sample data under Collection & handoff.
+2. Use `web/.env.example` to configure `web/.env.local`. Set a private GitHub repository and a fine-grained token with Contents read/write for it. Set the approved Drive folder ID and the OAuth client ID, client secret and refresh token for an account with write access to that folder. Restart the app after changing configuration.
+3. Select a stage and use **Verify destination access** to check the private GitHub repository and branch, and the Drive folder's upload capability and permissions. The check creates no files. Select the intended retrieval audience and upload the approved file. Collection extracts text from Markdown, UTF-8 text, text-based PDFs and DOCX for the five pilot categories. It archives the original and indexes extracted text after both destinations succeed. Image-only PDFs need OCR before upload. Other stage files are archived as evidence. If one destination fails, submit the same file again to retry it. The receipt lists each destination independently.
+4. Confirm the departments ready to activate, run the retrieval checks, then select **Deploy BusinessBrain**. This activates the release and its confirmed department bots locally. Ask from the BusinessBrain or from a confirmed bot's workspace to see cited passages. Source changes require a new retrieval check and release.
+
+Use **Refresh & removal** to see which indexed source versions are serving and which are staged. Withdraw a source there to remove every indexed version from the active release immediately and record the operator and reason. GitHub and Drive retain their archived originals. To restore a withdrawn source, upload it through Collection with a new owner approval reference, run retrieval checks, and deploy the new release.
+
+In **Collection & handoff**, select a CSV upload type and download its template. The portal validates the selected schema, numeric fields, and unique row keys before archiving. A successful upload replaces that table's snapshot. BusinessBrain shows the source file and row count and calculates KPIs from the uploaded snapshots. Executive chat can calculate total revenue, weighted pipeline, and utilisation from those same tables. Knowledge documents and the held-out retrieval evaluation support the cited department assistants.
+
+**Remove all uploaded data** clears the intake, analytics, and release while preserving department work records and confirmations. **Business reset**, at the bottom of PM, also clears confirmations, tasks, drafts, automations, and departmental records. Both reset actions require typing `RESET`. The next build starts in uploaded-data mode, and the original archives remain in GitHub and Drive.
+
+Private retrieval returns cited passages directly. To tune ranking, upload a JSONL question suite in **Evaluation**. Rows with `split: "calibration"` select the ranking profile. The separate `validation` rows check that profile before release. Each row names an expected top document or uses `null` to expect a refusal. An optional department ID runs the case through that bot's source scope. Validation is required in the shared team workspace.
+
+```jsonl
+{"question":"What are the approved proposal steps?","expectedDocument":"proposal-process.md","department":"sales","split":"calibration"}
+{"question":"Who approves a proposal?","expectedDocument":"proposal-process.md","department":"sales","split":"validation"}
+{"question":"What is the sales approval code?","expectedDocument":null,"department":"finance","split":"validation"}
+```
+
+The fine-tuning stage accepts evidence for external adapter training. The demo corpus can validate sample instruction pairs.
+
+An approved Azure OpenAI deployment can optionally synthesize cited answers. Set `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and `AZURE_OPENAI_DEPLOYMENT` for a deployment that supports Structured Outputs. Enable `BRAIN_MODEL_EGRESS_APPROVED` only after approving that deployment's data processing. The portal sends the question and up to three snippets from the caller's scoped release. It checks citation indices, verbatim supporting quotes, and cited numbers. Unavailable or invalid model responses fall back to cited passages. The deployment type determines inference geography. [Azure Structured Outputs](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/structured-outputs) · [Azure deployment types and data processing](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/deployment-types).
+
+Connector APIs: [GitHub repository contents](https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents) and [Drive file uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads).
+
+## Shared team workspace
+
+Build the standard Node portal with `npm ci` and `npm run build` in `web`. Start one production Node process with `npm run start:team` and a persistent volume for the brain and department stores. The process binds to `127.0.0.1`. Provide the private storage integration settings and these additional server-side settings in the host environment.
+
+| Setting | Value |
+| --- | --- |
+| `NODE_ENV` | `production` |
+| `BRAIN_TEAM_ORIGIN` | Exact HTTPS origin of the team portal, such as `https://businessos.example.com` |
+| `BRAIN_ACCESS_ISSUER` | Cloudflare Access team issuer, such as `https://example.cloudflareaccess.com` |
+| `BRAIN_ACCESS_AUDIENCE` | Audience tag of the self-hosted Access application |
+| `BRAIN_TEAM_ROSTER` | JSON mapping verified work emails to roles and, for heads, their department ID |
+| `BRAIN_DATA_FILE` | Absolute path to the persistent file for the shared brain, releases and handoff receipts |
+| `DEPARTMENT_STORE_PATH` | Distinct absolute path to the persistent file for tasks, drafts and reviews |
+
+Example roster shape: `{"builder@example.com":{"role":"dev"},"ceo@example.com":{"role":"ceo"},"sales@example.com":{"role":"head","department":"sales"}}`.
+
+Set up Cloudflare Access for the entire hostname and connect it to the loopback origin using a tunnel. Preserve the external Host header. The Node origin verifies the Access signature, issuer, audience and expiration on every request. Developers build and deploy. The CEO sees the business overview, assigns tasks, and validates custom automation definitions. Department heads can propose automations, manage pending tasks, and prepare reviewable drafts in their assigned workspace. CEO-approved custom automations can produce local drafts. The authenticated account is recorded as the reviewer.
+
+GitHub and Drive enforce their own permissions on archived originals and citation links. Keep archive access scoped to the approved readers for the files stored there.
+
+Keep the hosted Node build separate from the sample Workers. Verify the configured deployment with a developer, a CEO, and two department accounts before using real source files. [Cloudflare self-hosted Access setup](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/) · [Cloudflare token verification](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/).
 
 ## Test
 

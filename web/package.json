@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server/index.mjs",
+    "start:team": "node server/index.mjs --require-team",
     "build": "tsc --noEmit && vite build",
     "test": "node --test tests/*.test.mjs",
     "build:cloudflare": "VITE_HOSTING=cloudflare npm run build",
@@ -20,6 +21,9 @@
     "@fontsource/inter": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.8",
     "@vitejs/plugin-react": "^4.7.0",
+    "jose": "^6.2.17",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^6.5.438",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.8.3",
