@@ -63,6 +63,16 @@ Build the standard Node portal with `npm ci` and `npm run build` in `web`. Start
 | `BRAIN_DATA_FILE` | Absolute path to the persistent file for the shared brain, releases and handoff receipts |
 | `DEPARTMENT_STORE_PATH` | Distinct absolute path to the persistent file for tasks, drafts and reviews |
 
+### Cloudflare-hosted team portal
+
+The team portal can run on Cloudflare Workers with its workspace stored in a SQLite Durable Object. Use `web/wrangler.businessos.toml` for this deployment. It shares the Node portal's team API and uses the standard frontend build.
+
+1. In the Cloudflare account that owns the domain, create a self-hosted Access application for the exact BusinessOS hostname. Limit its Allow policy to the approved team emails. Record the Access application audience and issuer.
+2. From `web`, run `npm ci`, `npm test`, and `npm run build` with Node 22. Verify the logged-in account with `npx wrangler whoami` and validate packaging with `npx wrangler deploy --dry-run --config wrangler.businessos.toml`.
+3. Configure `BRAIN_ACCESS_AUDIENCE` and `BRAIN_TEAM_ROSTER` as Worker secrets. Use the roles listed above. Configure the GitHub and Google Drive connector secrets and approved destination IDs before testing private uploads.
+4. Deploy the Worker with `npx wrangler deploy --config wrangler.businessos.toml --keep-vars` and assign the exact BusinessOS custom domain in the Cloudflare dashboard. The configuration disables public preview and workers.dev addresses. Check the Access redirect before signing in, then confirm the team build with `/api/health`. Use a separate workspace to test reset.
+
+
 Example roster shape: `{"builder@example.com":{"role":"dev"},"ceo@example.com":{"role":"ceo"},"sales@example.com":{"role":"head","department":"sales"}}`.
 
 Set up Cloudflare Access for the entire hostname and connect it to the loopback origin using a tunnel. Preserve the external Host header. The Node origin verifies the Access signature, issuer, audience and expiration on every request. Developers build and deploy. The CEO sees the business overview, assigns tasks, and validates custom automation definitions. Department heads can propose automations, manage pending tasks, and prepare reviewable drafts in their assigned workspace. CEO-approved custom automations can produce local drafts. The authenticated account is recorded as the reviewer.

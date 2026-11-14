@@ -1,0 +1,25 @@
+name = "ethikcorp-businessos-team"
+main = "cloudflare/team-worker.mjs"
+compatibility_date = "2026-10-19"
+compatibility_flags = ["nodejs_compat"]
+account_id = "dd1f642bc34ad8e466e173e345bf5636"
+workers_dev = false
+preview_urls = false
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+run_worker_first = true
+
+[[durable_objects.bindings]]
+name = "BUSINESSOS_WORKSPACE"
+class_name = "BusinessOSWorkspace"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BusinessOSWorkspace"]
+
+[vars]
+NODE_ENV = "production"
+BRAIN_TEAM_ORIGIN = "https://ethickorpbusinessos.aqionlabs.ai"
+BRAIN_ACCESS_ISSUER = "https://sweet-scene-4005.cloudflareaccess.com"
