@@ -31,6 +31,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.8.3",
+    "unpdf": "1.9.1",
     "vite": "^5.4.15"
   },
   "devDependencies": {

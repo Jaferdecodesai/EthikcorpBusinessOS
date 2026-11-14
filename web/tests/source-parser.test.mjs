@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { extractWorkerSource } from "../cloudflare/team-source-parser.mjs";
 import { extractSourceFile } from "../server/source-parser.mjs";
 import { zipStore } from "../phase1/xlsx.mjs";
 import { emptyBrain, ingestDocument, prepareDocument, rankChunks } from "../server/brain-pipeline.mjs";
@@ -8,6 +9,8 @@ import { askRelease, deployCandidate, evaluateCandidate } from "../server/brain-
 test("a text-based PDF retains the original file name and page citation", async () => {
   const pdf = await extractSourceFile("pdf", textPdf("Synthetic invoice approval procedure"));
   assert.deepEqual([pdf.pages, pdf.textPages], [1, 1]);
+  const workerPdf = await extractWorkerSource("pdf", textPdf("Synthetic invoice approval procedure"));
+  assert.deepEqual(workerPdf, pdf);
   assert.match(pdf.text, /^# Page 1\n\nSynthetic invoice approval procedure/);
   const { brain } = ingestDocument(emptyBrain(), { name: "procedure.pdf", text: pdf.text, extractedFormat: pdf.format });
   assert.equal(brain.chunks[0].heading, "Page 1");
@@ -32,6 +35,7 @@ test("a Word source is extracted as plain text and can be retrieved in Arabic", 
   const bytes = Buffer.from(await zipStore(Object.entries(files).map(([name, xml]) => ({ name, data: Buffer.from(xml) }))));
   const word = await extractSourceFile("docx", bytes);
   assert.match(word.text, /المبيعات/);
+  assert.deepEqual(await extractWorkerSource("docx", bytes), word);
   const seed = { ...emptyBrain(), ownershipReady: true, confirmed: { sales: true }, ownership: [{ sourceId: "sops" }] };
   const { brain } = ingestDocument(seed, {
     name: "approved-procedures.docx", text: word.text, extractedFormat: word.format, sourceId: "sops", audience: "sales",

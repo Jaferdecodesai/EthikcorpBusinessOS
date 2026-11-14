@@ -15,7 +15,7 @@ import { answerFromReleaseModel, releaseModelConfig } from "./llm/release-answer
 import { answerBusinessMetric, businessTemplate } from "./business-intake.mjs";
 
 
-export function createWorkspaceApi({ env, team, localBuild = false, departmentStore, readBrain, persistBrain, getPort }) {
+export function createWorkspaceApi({ env, team, localBuild = false, departmentStore, readBrain, persistBrain, getPort, extractSource }) {
   const github = new Github(env.GITHUB_TOKEN || "");
   const localSecret = env.SESSION_SECRET || "local-cloudflare-preview-only-secret-not-for-deployment";
   const localSession = "local-preview-session";
@@ -202,7 +202,7 @@ export function createWorkspaceApi({ env, team, localBuild = false, departmentSt
       if (url.pathname === "/api/brain/handoff") {
         if (!managedBuild || req.method !== "POST" || !req.headers.origin) return json(res, 403, { error: "File handoff requires a BusinessBrain workspace." });
         try {
-          const result = await stageHandoff(brainState || emptyBrain(), body, env, { github });
+          const result = await stageHandoff(brainState || emptyBrain(), body, env, { github, extractSource });
           saveBrain(result.brain);
           return json(res, 200, result.receipt);
         } catch (error) {

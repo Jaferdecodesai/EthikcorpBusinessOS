@@ -70,7 +70,7 @@ The team portal can run on Cloudflare Workers with its workspace stored in a SQL
 1. In the Cloudflare account that owns the domain, create a self-hosted Access application for the exact BusinessOS hostname. Limit its Allow policy to the approved team emails. Record the Access application audience and issuer.
 2. From `web`, run `npm ci`, `npm test`, and `npm run build` with Node 22. Verify the logged-in account with `npx wrangler whoami` and validate packaging with `npx wrangler deploy --dry-run --config wrangler.businessos.toml`.
 3. Configure `BRAIN_ACCESS_AUDIENCE` and `BRAIN_TEAM_ROSTER` as Worker secrets. Use the roles listed above. Configure the GitHub and Google Drive connector secrets and approved destination IDs before testing private uploads.
-4. Deploy the Worker with `npx wrangler deploy --config wrangler.businessos.toml --keep-vars` and assign the exact BusinessOS custom domain in the Cloudflare dashboard. The configuration disables public preview and workers.dev addresses. Check the Access redirect before signing in, then confirm the team build with `/api/health`. Use a separate workspace to test reset.
+4. Deploy the Worker with `npx wrangler deploy --config wrangler.businessos.toml --keep-vars` and verify the exact BusinessOS custom domain listed in the configuration. The configuration disables public preview and workers.dev addresses. Check the Access redirect before signing in, then confirm the team build with `/api/health`. Use a separate workspace to test reset.
 
 
 Example roster shape: `{"builder@example.com":{"role":"dev"},"ceo@example.com":{"role":"ceo"},"sales@example.com":{"role":"head","department":"sales"}}`.

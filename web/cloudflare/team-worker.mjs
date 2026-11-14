@@ -1,3 +1,4 @@
+import { extractWorkerSource } from "./team-source-parser.mjs";
 import { DurableObject } from "cloudflare:workers";
 import { createWorkspaceApi } from "../server/workspace-api.mjs";
 import { createDepartmentStoreCore } from "../server/department-core.mjs";
@@ -96,7 +97,7 @@ export class BusinessOSWorkspace extends DurableObject {
     const state = stateStorage(ctx.storage);
     const departmentStore = createDepartmentStoreCore(state.read("departments"), (next) => state.write("departments", next));
     this.handleApi = createWorkspaceApi({
-      env, team: this.team, departmentStore,
+      env, team: this.team, departmentStore, extractSource: extractWorkerSource,
       readBrain: () => state.read("brain"),
       persistBrain: (next) => state.write("brain", next)
     });
@@ -112,7 +113,17 @@ export class BusinessOSWorkspace extends DurableObject {
       method: request.method,
       headers: Object.fromEntries(request.headers),
       async *[Symbol.asyncIterator]() {
-        if (request.body) yield* request.body;
+        if (!request.body) return;
+        const reader = request.body.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            yield value;
+          }
+        } finally {
+          reader.releaseLock();
+        }
       }
     };
     const chunks = [];

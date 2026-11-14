@@ -117,7 +117,7 @@ export async function verifyHandoffDestinations(env, { github = new Github(env.G
   })));
 }
 
-export async function stageHandoff(brain, input, env, { github = new Github(env.GITHUB_TOKEN), fetcher = fetch } = {}) {
+export async function stageHandoff(brain, input, env, { github = new Github(env.GITHUB_TOKEN), fetcher = fetch, extractSource = extractSourceFile } = {}) {
   const stage = BUILD_STAGES.find(({ id }) => id === input.stage);
   const name = typeof input.fileName === "string" ? input.fileName.trim() : "";
   const extension = name.toLowerCase().split(".").pop();
@@ -152,7 +152,7 @@ export async function stageHandoff(brain, input, env, { github = new Github(env.
     if (withdrawal?.previousApprovals.some((reference) => reference.toLowerCase() === approvalRef.toLowerCase())) {
       throw new Error("This source was withdrawn. Enter a new owner approval reference to restore it.");
     }
-    extracted = await extractSourceFile(extension, bytes);
+    extracted = await extractSource(extension, bytes);
     prepared = prepareDocument({ name, text: extracted.text, extractedFormat: extracted.format });
     if (!prepared.ok) throw new Error(prepared.error);
   }
